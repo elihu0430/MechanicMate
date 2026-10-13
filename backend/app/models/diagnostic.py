@@ -5,7 +5,7 @@ from sqlalchemy import String, DateTime, Text, ForeignKey, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 
-from backend.app.models.base import Base
+from app.models.base import Base
 
 class DiagnosticEntry(Base):
     __tablename__ = "diagnostic_entries"

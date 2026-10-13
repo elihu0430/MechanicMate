@@ -5,7 +5,7 @@ from sqlalchemy import String, Numeric, Integer, DateTime, ForeignKey, Index, fu
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID
 
-from backend.app.models.base import Base
+from app.models.base import Base
 
 class InventoryItem(Base):
     __tablename__ = "inventory_items"

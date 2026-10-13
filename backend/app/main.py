@@ -1,18 +1,29 @@
 import sys
 from pathlib import Path
 
-# Ensure project root is in sys.path so 'backend.app' imports work from both root and backend/
-_project_root = Path(__file__).resolve().parent.parent.parent
+# Ensure backend directory is in sys.path so 'app' imports work from both root and backend/
+_backend_dir = Path(__file__).resolve().parent.parent
+if str(_backend_dir) not in sys.path:
+    sys.path.insert(0, str(_backend_dir))
+
+_project_root = _backend_dir.parent
 if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
+
+# Backwards compatibility alias for 'backend.app'
+import types
+if "backend" not in sys.modules:
+    _b = types.ModuleType("backend")
+    sys.modules["backend"] = _b
+
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
-from backend.app.config import settings
-from backend.app.api.v1.router import api_router
-from backend.app.core.websockets import ws_manager
+from app.config import settings
+from app.api.v1.router import api_router
+from app.core.websockets import ws_manager
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -20,7 +31,7 @@ async def lifespan(app: FastAPI):
     print(f"[STARTUP] {settings.PROJECT_NAME} starting up in {settings.ENVIRONMENT} mode...")
     if settings.ENVIRONMENT == "development":
         try:
-            from backend.app.core.database import AsyncSessionLocal
+            from app.core.database import AsyncSessionLocal
             from sqlalchemy import text
             async with AsyncSessionLocal() as db:
                 await db.execute(text("""

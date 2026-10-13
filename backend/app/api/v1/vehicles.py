@@ -4,12 +4,12 @@ from sqlalchemy import select, and_, desc
 from typing import List, Optional
 import uuid
 
-from backend.app.dependencies import DatabaseDep, CurrentUserDep
-from backend.app.core.auth import AuthenticatedUser
-from backend.app.models.vehicle import Vehicle
-from backend.app.schemas.intake import VehicleCreate, VehicleRead
+from app.dependencies import DatabaseDep, CurrentUserDep
+from app.core.auth import AuthenticatedUser
+from app.models.vehicle import Vehicle
+from app.schemas.intake import VehicleCreate, VehicleRead
 
-from backend.app.models.customer import Customer
+from app.models.customer import Customer
 from sqlalchemy.exc import IntegrityError
 
 router = APIRouter(prefix="/vehicles", tags=["Vehicles"])

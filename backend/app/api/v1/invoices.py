@@ -5,11 +5,11 @@ from sqlalchemy.orm import selectinload
 from typing import List
 import uuid
 
-from backend.app.dependencies import DatabaseDep, CurrentUserDep
-from backend.app.core.auth import AuthenticatedUser
-from backend.app.models.invoice import Invoice, Payment
-from backend.app.models.job import RepairOrder
-from backend.app.schemas.invoice import InvoiceCreate, InvoiceRead, PaymentCreate, PaymentRead
+from app.dependencies import DatabaseDep, CurrentUserDep
+from app.core.auth import AuthenticatedUser
+from app.models.invoice import Invoice, Payment
+from app.models.job import RepairOrder
+from app.schemas.invoice import InvoiceCreate, InvoiceRead, PaymentCreate, PaymentRead
 
 router = APIRouter(prefix="/invoices", tags=["Invoices & Billing"])
 
