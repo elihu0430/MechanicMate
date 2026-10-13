@@ -8,7 +8,9 @@ export default function SSOCallbackPage() {
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
 
-  const clerkKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
+  const clerkKey =
+    process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ||
+    "pk_test_cHJlY2lzZS13YWxydXMtMjE5MC5jbGVyay5hY2NvdW50cy5kZXYk";
   const isClerkConfigured =
     Boolean(clerkKey && !clerkKey.includes("YOUR_") && clerkKey.startsWith("pk_"));
 

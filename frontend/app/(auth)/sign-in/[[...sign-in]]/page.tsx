@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSignIn } from "@clerk/nextjs/legacy";
 
+export const dynamic = "force-dynamic";
+
 export default function SignInPage() {
   const [mounted, setMounted] = useState(false);
 
@@ -17,6 +19,31 @@ export default function SignInPage() {
       <div className="flex flex-col items-center justify-center py-16 gap-3">
         <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#22c55e] border-t-transparent" />
         <p className="text-xs text-neutral-400">Loading sign in...</p>
+      </div>
+    );
+  }
+
+  const clerkKey =
+    process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ||
+    "pk_test_cHJlY2lzZS13YWxydXMtMjE5MC5jbGVyay5hY2NvdW50cy5kZXYk";
+  const isClerkConfigured = Boolean(
+    clerkKey && !clerkKey.includes("YOUR_") && clerkKey.startsWith("pk_")
+  );
+
+  if (!isClerkConfigured) {
+    return (
+      <div className="rounded-2xl bg-[#141414] border border-[#242424] p-6 text-center space-y-4 max-w-md mx-auto">
+        <span className="text-3xl">⚠️</span>
+        <h2 className="text-base font-bold text-white">Authentication Service Not Configured</h2>
+        <p className="text-xs text-[#737373]">
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY is missing from environment variables.
+        </p>
+        <Link
+          href="/"
+          className="inline-block rounded-xl bg-[#22c55e] px-4 py-2 text-xs font-bold text-black hover:bg-[#16a34a]"
+        >
+          Return to Dashboard
+        </Link>
       </div>
     );
   }
