@@ -4,12 +4,12 @@ from sqlalchemy import select, and_, func
 from sqlalchemy.orm import selectinload
 import uuid
 
-from backend.app.dependencies import DatabaseDep, CurrentUserDep
-from backend.app.core.auth import AuthenticatedUser
-from backend.app.models.vehicle import Vehicle
-from backend.app.models.customer import Customer
-from backend.app.models.job import RepairOrder
-from backend.app.schemas.intake import IntakeLookupResponse, VehicleRead, CustomerSummary
+from app.dependencies import DatabaseDep, CurrentUserDep
+from app.core.auth import AuthenticatedUser
+from app.models.vehicle import Vehicle
+from app.models.customer import Customer
+from app.models.job import RepairOrder
+from app.schemas.intake import IntakeLookupResponse, VehicleRead, CustomerSummary
 
 router = APIRouter(prefix="/intake", tags=["Intake"])
 

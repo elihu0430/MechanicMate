@@ -6,14 +6,14 @@ from typing import List
 import uuid
 import secrets
 
-from backend.app.dependencies import DatabaseDep, CurrentUserDep
-from backend.app.core.auth import AuthenticatedUser
-from backend.app.models.inspection import (
+from app.dependencies import DatabaseDep, CurrentUserDep
+from app.core.auth import AuthenticatedUser
+from app.models.inspection import (
     Inspection,
     InspectionChecklistItem,
     VehicleDamagePin,
 )
-from backend.app.schemas.inspection import (
+from app.schemas.inspection import (
     InspectionCreate,
     InspectionRead,
     DamagePinCreate,

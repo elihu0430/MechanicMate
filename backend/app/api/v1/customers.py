@@ -4,10 +4,10 @@ from sqlalchemy import select, and_, desc, or_
 from typing import List, Optional
 import uuid
 
-from backend.app.dependencies import DatabaseDep, CurrentUserDep
-from backend.app.core.auth import AuthenticatedUser
-from backend.app.models.customer import Customer
-from backend.app.schemas.customer import CustomerCreate, CustomerRead
+from app.dependencies import DatabaseDep, CurrentUserDep
+from app.core.auth import AuthenticatedUser
+from app.models.customer import Customer
+from app.schemas.customer import CustomerCreate, CustomerRead
 
 router = APIRouter(prefix="/customers", tags=["Customers"])
 

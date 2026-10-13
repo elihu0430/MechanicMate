@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import patch, AsyncMock, MagicMock
-from backend.app.services.trigger import TriggerService
+from app.services.trigger import TriggerService
 
 
 @pytest.mark.asyncio

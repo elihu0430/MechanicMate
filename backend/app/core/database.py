@@ -1,6 +1,6 @@
 from typing import AsyncGenerator
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
-from backend.app.config import settings
+from app.config import settings
 
 # Engine configuration with asyncpg
 connect_args = {}

@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from backend.app.api.v1 import intake, jobs, customers, vehicles, inspections, invoices, trigger
+from app.api.v1 import intake, jobs, customers, vehicles, inspections, invoices, trigger
 
 api_router = APIRouter()
 

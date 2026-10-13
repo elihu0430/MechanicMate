@@ -1,7 +1,7 @@
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Optional, List
-from backend.app.models.customer import Customer
-from backend.app.models.workshop import Workshop
+from app.models.customer import Customer
+from app.models.workshop import Workshop
 
 def quantize_money(amount: Decimal) -> Decimal:
     return amount.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)

@@ -5,7 +5,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import httpx
 from pydantic import BaseModel
 
-from backend.app.config import settings
+from app.config import settings
 
 security = HTTPBearer(auto_error=False)
 

@@ -2,9 +2,9 @@ from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
 from typing import Dict, Any, Optional
 
-from backend.app.dependencies import CurrentUserDep
-from backend.app.core.auth import AuthenticatedUser
-from backend.app.services.trigger import trigger_service
+from app.dependencies import CurrentUserDep
+from app.core.auth import AuthenticatedUser
+from app.services.trigger import trigger_service
 
 router = APIRouter(prefix="/trigger", tags=["Trigger.dev Orchestration"])
 

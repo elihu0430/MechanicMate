@@ -1,7 +1,7 @@
+import ast
 from typing import List, Union
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import AnyHttpUrl, validator
-
+from pydantic import field_validator
 from pathlib import Path
 
 _backend_dir = Path(__file__).resolve().parent.parent
@@ -17,7 +17,25 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "MechanicMate API"
     API_V1_STR: str = "/api/v1"
     
-    CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
+    CORS_ORIGINS: Union[List[str], str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
+
+    @field_validator("CORS_ORIGINS", mode="before")
+    @classmethod
+    def assemble_cors_origins(cls, v: Union[str, List[str]]) -> List[str]:
+        if isinstance(v, str):
+            v = v.strip()
+            if not v:
+                return ["*"]
+            if v.startswith("[") and v.endswith("]"):
+                try:
+                    return [str(item).strip() for item in ast.literal_eval(v)]
+                except Exception:
+                    pass
+            return [origin.strip() for origin in v.split(",") if origin.strip()]
+        elif isinstance(v, list):
+            return [str(item).strip() for item in v]
+        return ["*"]
+
 
     # Neon PostgreSQL connection string (asyncpg)
     DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/mechanicmate"

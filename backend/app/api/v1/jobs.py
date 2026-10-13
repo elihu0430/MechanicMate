@@ -7,21 +7,21 @@ import uuid
 import secrets
 from decimal import Decimal
 
-from backend.app.dependencies import DatabaseDep, CurrentUserDep
-from backend.app.core.auth import AuthenticatedUser
-from backend.app.core.websockets import ws_manager
-from backend.app.models.job import RepairOrder, RepairOrderItem
-from backend.app.models.customer import Customer
-from backend.app.models.workshop import Workshop
-from backend.app.schemas.job import (
+from app.dependencies import DatabaseDep, CurrentUserDep
+from app.core.auth import AuthenticatedUser
+from app.core.websockets import ws_manager
+from app.models.job import RepairOrder, RepairOrderItem
+from app.models.customer import Customer
+from app.models.workshop import Workshop
+from app.schemas.job import (
     RepairOrderCreate,
     RepairOrderRead,
     RepairOrderUpdateStatus,
     RepairOrderItemCreate,
     RepairOrderItemRead,
 )
-from backend.app.services.pricing import PricingEngine
-from backend.app.services.trigger import trigger_service
+from app.services.pricing import PricingEngine
+from app.services.trigger import trigger_service
 
 router = APIRouter(prefix="/jobs", tags=["Jobs & Repair Orders"])
 

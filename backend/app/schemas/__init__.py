@@ -1,5 +1,5 @@
-from backend.app.schemas.intake import IntakeLookupResponse, VehicleCreate, VehicleRead, CustomerSummary
-from backend.app.schemas.job import (
+from app.schemas.intake import IntakeLookupResponse, VehicleCreate, VehicleRead, CustomerSummary
+from app.schemas.job import (
     RepairOrderBase,
     RepairOrderCreate,
     RepairOrderRead,
@@ -7,9 +7,9 @@ from backend.app.schemas.job import (
     RepairOrderItemCreate,
     RepairOrderItemRead,
 )
-from backend.app.schemas.customer import CustomerCreate, CustomerRead
-from backend.app.schemas.invoice import InvoiceCreate, InvoiceRead, PaymentCreate, PaymentRead
-from backend.app.schemas.inspection import (
+from app.schemas.customer import CustomerCreate, CustomerRead
+from app.schemas.invoice import InvoiceCreate, InvoiceRead, PaymentCreate, PaymentRead
+from app.schemas.inspection import (
     InspectionCreate,
     InspectionRead,
     DamagePinCreate,
