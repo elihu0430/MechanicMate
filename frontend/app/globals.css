@@ -1,0 +1,484 @@
+@import "tailwindcss";
+
+/* ==========================================================================
+   MechanicMate Design System Tokens & Workshop Ergonomics
+   Optimized for Next.js 15 App Router & Tailwind CSS v4
+   Aesthetic: Dark Automotive Technology | Mobile-First Bay & Field Ergonomics
+   ========================================================================== */
+
+:root {
+  /* ------------------------------------------------------------------------
+     1. Surfaces & Backgrounds
+     High-contrast dark theme designed for harsh garage lighting and oily environments
+     ------------------------------------------------------------------------ */
+  --canvas: #0a0a0a; /* Root app canvas background */
+  --sidebar: #0f0f0f; /* Sidebar navigation / docked drawer */
+  --surface: #141414; /* Panels, table headers, sticky section bars */
+  --card: #1a1a1a; /* Work order cards, bay slots, customer panels */
+  --raised: #212121; /* Raised cards, modal dialogs, input backgrounds, active hovers */
+
+  /* ------------------------------------------------------------------------
+     2. Borders
+     Subtle separation that stays legible under dirty shop screens
+     ------------------------------------------------------------------------ */
+  --border: #272727; /* Default divider and card border */
+  --border-hover: #363636; /* Interactive hover / active outline */
+
+  /* ------------------------------------------------------------------------
+     3. Typography
+     High legibility hierarchy tuned for quick scanning across workshop bays
+     ------------------------------------------------------------------------ */
+  --text-primary: #ededed; /* High-contrast primary headers and data values */
+  --text-secondary: #a3a3a3; /* Labels, descriptions, secondary specifications */
+  --text-muted: #5a5a5a; /* Placeholders, disabled states, inactive timestamps */
+
+  /* ------------------------------------------------------------------------
+     4. Semantic Automotive Accents
+     Color-coded status indicators for bays, repair orders, and inventory
+     ------------------------------------------------------------------------ */
+  /* Primary Action: Electric Green (Completed, Approved, Clock-in, Ready for Pickup) */
+  --accent-primary: #22c55e;
+  --accent-primary-hover: #16a34a;
+  --accent-primary-dim: rgba(34, 197, 94, 0.12);
+  --accent-primary-text: #000000;
+
+  /* Warning / Attention: Amber (Inspection Required, Approaching Due Date, Low Stock) */
+  --accent-warning: #f59e0b;
+  --accent-warning-hover: #d97706;
+  --accent-warning-dim: rgba(245, 158, 11, 0.12);
+
+  /* Urgent / Danger: Signal Red (Overdue, Safety Recall, Brake Hazard, Cancelled) */
+  --accent-danger: #ef4444;
+  --accent-danger-hover: #dc2626;
+  --accent-danger-dim: rgba(239, 68, 68, 0.12);
+
+  /* Info / Secondary Action: Cyan (Diagnostics, OBD-II Scanner Connected, Telemetry) */
+  --accent-info: #38bdf8;
+  --accent-info-hover: #0284c7;
+  --accent-info-dim: rgba(56, 189, 248, 0.12);
+
+  /* Waiting for Parts: Purple (Pending Delivery, Supplier Backordered, ETA Tracking) */
+  --accent-parts: #a78bfa;
+  --accent-parts-hover: #8b5cf6;
+  --accent-parts-dim: rgba(167, 139, 250, 0.12);
+
+  /* ------------------------------------------------------------------------
+     Mobile Safe Area Insets (Notches, Home Indicator Bars, PWA Standalone Mode)
+     ------------------------------------------------------------------------ */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+
+  /* ------------------------------------------------------------------------
+     Typography Stacks
+     Geist / Inter for fast scanning + Geist Mono / JetBrains Mono for VINs & numbers
+     ------------------------------------------------------------------------ */
+  --font-sans:
+    var(--font-geist-sans), Inter, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono:
+    var(--font-geist-mono), "JetBrains Mono", ui-monospace, SFMono-Regular,
+    Menlo, Monaco, Consolas, monospace;
+}
+
+/* ==========================================================================
+   Tailwind CSS v4 @theme Configuration
+   Exposes design tokens directly as first-class utility classes in JSX
+   ========================================================================== */
+
+@theme {
+  /* Font Families */
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+
+  /* Surfaces & Backgrounds -> bg-canvas, bg-sidebar, bg-surface, bg-card, bg-raised */
+  --color-canvas: var(--canvas);
+  --color-sidebar: var(--sidebar);
+  --color-surface: var(--surface);
+  --color-card: var(--card);
+  --color-raised: var(--raised);
+
+  /* Borders -> border-border, border-border-hover */
+  --color-border: var(--border);
+  --color-border-hover: var(--border-hover);
+
+  /* Typography / Text Colors -> text-primary, text-secondary, text-muted */
+  --color-primary: var(--text-primary);
+  --color-secondary: var(--text-secondary);
+  --color-muted: var(--text-muted);
+
+  /* Aliased text color classes -> text-text-primary, text-text-secondary, text-text-muted */
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-muted: var(--text-muted);
+
+  /* Primary Action (Electric Green) -> bg-action, text-action, border-action */
+  --color-action: var(--accent-primary);
+  --color-action-hover: var(--accent-primary-hover);
+  --color-action-dim: var(--accent-primary-dim);
+  --color-action-text: var(--accent-primary-text);
+
+  /* Accent Primary Aliases -> bg-accent-primary, text-accent-primary, border-accent-primary */
+  --color-accent-primary: var(--accent-primary);
+  --color-accent-primary-hover: var(--accent-primary-hover);
+  --color-accent-primary-dim: var(--accent-primary-dim);
+  --color-accent-primary-text: var(--accent-primary-text);
+
+  /* Semantic Warning (Amber) -> bg-warning, text-warning, border-warning, bg-warning-dim */
+  --color-warning: var(--accent-warning);
+  --color-warning-hover: var(--accent-warning-hover);
+  --color-warning-dim: var(--accent-warning-dim);
+
+  /* Semantic Danger (Signal Red) -> bg-danger, text-danger, border-danger, bg-danger-dim */
+  --color-danger: var(--accent-danger);
+  --color-danger-hover: var(--accent-danger-hover);
+  --color-danger-dim: var(--accent-danger-dim);
+
+  /* Semantic Info (Cyan) -> bg-info, text-info, border-info, bg-info-dim */
+  --color-info: var(--accent-info);
+  --color-info-hover: var(--accent-info-hover);
+  --color-info-dim: var(--accent-info-dim);
+
+  /* Semantic Parts (Purple) -> bg-parts, text-parts, border-parts, bg-parts-dim */
+  --color-parts: var(--accent-parts);
+  --color-parts-hover: var(--accent-parts-hover);
+  --color-parts-dim: var(--accent-parts-dim);
+}
+
+/* ==========================================================================
+   Mobile & PWA Workshop Ergonomics
+   Engineered for responsive tablet/phone bay use, gloved taps, and quick scans
+   ========================================================================== */
+
+/* Universal Mobile Ergonomics:
+   - Prevent annoying 300ms double-tap zoom delay across touch devices
+   - Strip default mobile browser gray highlight box on tap */
+html {
+  color-scheme: dark;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  background-color: var(--canvas);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  overflow-x: hidden;
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+/* Prevent accidental text selection on oily touchscreens when tapping fast */
+button,
+[role="button"],
+[role="tab"],
+.btn,
+.badge,
+.tab,
+.no-select,
+input[type="button"],
+input[type="submit"],
+input[type="reset"] {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  touch-action: manipulation;
+}
+
+/* Workshop Minimum Touch Target Size (44px x 44px WCAG & Ergonomic Benchmark) */
+.touch-target,
+.btn-touch {
+  min-height: 44px;
+  min-width: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ==========================================================================
+   Form Controls & Workshop Inputs
+   High-contrast, raised inputs with Electric Green focus feedback
+   ========================================================================== */
+
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="number"],
+input[type="tel"],
+input[type="url"],
+input[type="search"],
+input[type="date"],
+input[type="time"],
+input[type="datetime-local"],
+select,
+textarea {
+  background-color: var(--raised);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  padding: 0.625rem 0.875rem;
+  font-size: 1rem; /* 16px font-size prevents iOS Safari auto-zoom on field focus */
+  line-height: 1.5;
+  transition:
+    border-color 0.15s ease-in-out,
+    box-shadow 0.15s ease-in-out,
+    background-color 0.15s ease-in-out;
+}
+
+input[type="text"]:focus,
+input[type="email"]:focus,
+input[type="password"]:focus,
+input[type="number"]:focus,
+input[type="tel"]:focus,
+input[type="url"]:focus,
+input[type="search"]:focus,
+input[type="date"]:focus,
+input[type="time"]:focus,
+input[type="datetime-local"]:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.25);
+  background-color: var(--raised);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--text-muted);
+  opacity: 1;
+}
+
+/* Remove default WebKit number input spinner arrows (odometer, qty, price inputs) */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+/* Invert native date/time picker calendar icons for dark mode */
+::-webkit-calendar-picker-indicator {
+  filter: invert(0.8);
+  cursor: pointer;
+}
+
+/* ==========================================================================
+   Custom Utility Classes
+   ========================================================================== */
+
+/* 1. Tabular Numbers & Monospace Data Display
+   Mandatory for: 17-char VINs, Repair Order numbers, odometer KM, and currency alignment */
+.mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+/* Specialized VIN Display (Uppercase, spaced, tabular) */
+.vin-display {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 500;
+}
+
+/* 2. Customer Authorization Signature Canvas
+   Strict touch isolation to prevent canvas rubber-banding, scrolling, or drag-artifacts */
+.signature-canvas {
+  touch-action: none;
+  cursor: crosshair;
+  overscroll-behavior: contain;
+  -webkit-user-select: none;
+  user-select: none;
+  background-color: var(--surface);
+  border: 1px dashed var(--border);
+  border-radius: 0.5rem;
+}
+
+/* 3. Mobile Safe Area Utility Helpers
+   Prevents floating action buttons and navigation docks from clipping behind home indicators */
+.safe-bottom-nav {
+  padding-bottom: max(0.75rem, env(safe-area-inset-bottom, 0px));
+}
+
+.safe-top-nav {
+  padding-top: max(0.75rem, env(safe-area-inset-top, 0px));
+}
+
+.safe-inset-top {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+.safe-inset-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.safe-inset-left {
+  padding-left: env(safe-area-inset-left, 0px);
+}
+
+.safe-inset-right {
+  padding-right: env(safe-area-inset-right, 0px);
+}
+
+/* 4. Sleek Dark Custom Scrollbars for Data Tables, Bay Kanban, and Log Sheets */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0f0f0f;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #272727;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #363636;
+}
+
+/* Firefox Scrollbar Support */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #272727 #0f0f0f;
+}
+
+/* Optional scoped custom scrollbar container class */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: #0f0f0f;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #272727;
+  border-radius: 9999px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #363636;
+}
+
+/* ==========================================================================
+   Print Stylesheet (@media print)
+   Optimized for physical A4 printing of customer estimates, invoices, and checklists
+   ========================================================================== */
+
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 12mm 15mm;
+  }
+
+  /* Invert app dark theme to pure white paper & deep black ink */
+  *,
+  *::before,
+  *::after {
+    background: transparent !important;
+    color: #000000 !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  html,
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    font-size: 11pt !important;
+    line-height: 1.4 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  /* Strip non-printable UI: Sidebars, mobile bottom docks, action bars, buttons */
+  nav,
+  aside,
+  header,
+  footer,
+  .sidebar,
+  .bottom-nav,
+  .safe-bottom-nav,
+  .no-print,
+  button,
+  [role="button"],
+  [role="tab"],
+  .action-button,
+  .btn,
+  input[type="button"],
+  input[type="submit"],
+  input[type="reset"],
+  .signature-canvas-controls {
+    display: none !important;
+  }
+
+  /* Crisp black-and-white table borders for parts, labor rates, and totals */
+  table {
+    border-collapse: collapse !important;
+    width: 100% !important;
+    margin-top: 1rem !important;
+    margin-bottom: 1rem !important;
+  }
+
+  th,
+  td {
+    border: 1px solid #111111 !important;
+    padding: 6px 10px !important;
+    color: #000000 !important;
+    text-align: left;
+  }
+
+  th {
+    background-color: #f3f4f6 !important;
+    font-weight: 700 !important;
+    text-transform: uppercase;
+    font-size: 9pt;
+  }
+
+  /* Page break controls for multi-page repair orders */
+  .page-break {
+    page-break-before: always;
+    break-before: page;
+  }
+
+  .avoid-break,
+  tr,
+  img,
+  svg,
+  .signature-block {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  a,
+  a:visited {
+    text-decoration: underline;
+    color: #000000 !important;
+  }
+}
