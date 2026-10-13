@@ -1,30 +1,43 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { AppShell } from "@/components/layout/AppShell";
-import { MOCK_REPAIR_ORDERS, formatCurrency } from "@/lib/mock-data";
-import { JobStatus, RepairOrder } from "@/lib/types";
+import { useApi, ApiRepairOrder } from "@/lib/api";
+import { formatCurrency } from "@/lib/format";
 
-const STATUS_FILTERS: { id: "all" | JobStatus; label: string }[] = [
+const STATUS_FILTERS = [
   { id: "all", label: "All ROs" },
-  { id: "in-progress", label: "In Progress" },
-  { id: "waiting-parts", label: "Waiting Parts" },
-  { id: "ready", label: "Ready for Pickup" },
-  { id: "scheduled", label: "Scheduled" },
+  { id: "wip", label: "In Progress (WIP)" },
+  { id: "created", label: "Scheduled / Created" },
+  { id: "due", label: "Ready for Pickup" },
   { id: "completed", label: "Completed" },
 ];
 
 const STATUS_CONFIG: Record<
-  JobStatus,
+  string,
   { label: string; text: string; bg: string; dot: string; border: string }
 > = {
+  created: {
+    label: "Scheduled",
+    text: "text-[#38bdf8]",
+    bg: "bg-[#38bdf8]/10",
+    dot: "bg-[#38bdf8]",
+    border: "border-[#38bdf8]/20",
+  },
   scheduled: {
     label: "Scheduled",
     text: "text-[#38bdf8]",
     bg: "bg-[#38bdf8]/10",
     dot: "bg-[#38bdf8]",
     border: "border-[#38bdf8]/20",
+  },
+  wip: {
+    label: "In Progress",
+    text: "text-[#f59e0b]",
+    bg: "bg-[#f59e0b]/10",
+    dot: "bg-[#f59e0b]",
+    border: "border-[#f59e0b]/20",
   },
   "in-progress": {
     label: "In Progress",
@@ -33,12 +46,12 @@ const STATUS_CONFIG: Record<
     dot: "bg-[#f59e0b]",
     border: "border-[#f59e0b]/20",
   },
-  "waiting-parts": {
-    label: "Waiting for Parts",
-    text: "text-[#a78bfa]",
-    bg: "bg-[#a78bfa]/10",
-    dot: "bg-[#a78bfa]",
-    border: "border-[#a78bfa]/20",
+  due: {
+    label: "Ready for Pickup",
+    text: "text-[#22c55e]",
+    bg: "bg-[#22c55e]/10",
+    dot: "bg-[#22c55e]",
+    border: "border-[#22c55e]/20",
   },
   ready: {
     label: "Ready for Pickup",
@@ -57,19 +70,46 @@ const STATUS_CONFIG: Record<
 };
 
 export default function JobsPage() {
+  const api = useApi();
   const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState<"all" | JobStatus>("all");
+  const [filter, setFilter] = useState("all");
+  const [jobs, setJobs] = useState<ApiRepairOrder[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const filteredJobs = MOCK_REPAIR_ORDERS.filter((job) => {
+  const loadJobs = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      const statusParam = filter !== "all" ? filter : undefined;
+      const data = await api.jobs.list(statusParam);
+      setJobs(data);
+    } catch (err: any) {
+      console.error("Failed to load jobs:", err);
+      setError(err?.message || "Failed to load repair orders from database");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [api, filter]);
+
+  useEffect(() => {
+    loadJobs();
+  }, [loadJobs]);
+
+  const filteredJobs = jobs.filter((job) => {
     const matchesFilter = filter === "all" || job.status === filter;
     const query = search.toLowerCase();
+    const customerName = job.customer?.name?.toLowerCase() || "";
+    const plate = job.vehicle?.license_plate?.toLowerCase() || "";
+    const vehicleName = `${job.vehicle?.make || ""} ${job.vehicle?.model || ""}`.toLowerCase();
     const matchesSearch =
       !query ||
-      job.roNumber.toLowerCase().includes(query) ||
-      job.customerName.toLowerCase().includes(query) ||
-      job.licensePlate.toLowerCase().includes(query) ||
-      job.vehicleModel.toLowerCase().includes(query) ||
-      job.service.toLowerCase().includes(query);
+      job.ro_number.toLowerCase().includes(query) ||
+      customerName.includes(query) ||
+      plate.includes(query) ||
+      vehicleName.includes(query) ||
+      (job.recommended_work && job.recommended_work.toLowerCase().includes(query)) ||
+      (job.customer_concern && job.customer_concern.toLowerCase().includes(query));
 
     return matchesFilter && matchesSearch;
   });
@@ -84,7 +124,7 @@ export default function JobsPage() {
               Repair Orders
             </h1>
             <p className="text-xs sm:text-sm font-medium text-[#7a7a7a] mt-0.5">
-              Active workshop bay jobs, diagnostics, and service estimates.
+              Live workshop bay jobs, diagnostics, and service estimates.
             </p>
           </div>
 
@@ -113,14 +153,14 @@ export default function JobsPage() {
           </div>
           <input
             type="text"
-            placeholder="Search by RO#, customer name, plate (e.g. ABC 1234 GP)..."
+            placeholder="Search by RO#, customer name, plate (e.g. SARAH-GP)..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full pl-10 pr-4 py-3 rounded-xl bg-[#141414] border border-[#262626] text-sm text-white placeholder:text-[#555] focus:border-[#22c55e] focus:outline-none"
           />
         </div>
 
-        {/* Status Filter Tabs (Horizontal Scrollable on Mobile) */}
+        {/* Status Filter Tabs */}
         <div className="flex gap-2 overflow-x-auto pb-2 custom-scrollbar">
           {STATUS_FILTERS.map((tab) => {
             const active = filter === tab.id;
@@ -140,15 +180,45 @@ export default function JobsPage() {
           })}
         </div>
 
+        {error && (
+          <div className="p-4 rounded-xl bg-red-950/40 border border-red-800/50 text-red-300 text-sm flex items-center justify-between">
+            <span>{error}</span>
+            <button onClick={loadJobs} className="text-xs font-bold underline hover:text-white">
+              Retry
+            </button>
+          </div>
+        )}
+
+        {isLoading && (
+          <div className="py-12 text-center text-[#737373] text-sm animate-pulse">
+            Loading repair orders from database...
+          </div>
+        )}
+
         {/* Jobs List */}
-        <div className="space-y-3.5">
-          {filteredJobs.length === 0 ? (
-            <div className="rounded-2xl bg-[#141414] border border-[#242424] p-8 text-center text-[#737373] text-sm">
-              No repair orders matching your filter criteria.
-            </div>
-          ) : (
-            filteredJobs.map((job) => {
-              const statusCfg = STATUS_CONFIG[job.status];
+        {!isLoading && filteredJobs.length === 0 ? (
+          <div className="rounded-2xl bg-[#141414] border border-dashed border-[#242424] p-12 text-center space-y-3">
+            <p className="text-base font-bold text-neutral-300">No repair orders in database</p>
+            <p className="text-xs text-[#737373]">
+              Create a new repair order to book a vehicle into a workshop bay.
+            </p>
+            <Link
+              href="/jobs/new"
+              className="inline-block mt-2 rounded-xl bg-[#22c55e] px-4 py-2 text-xs font-bold text-black hover:bg-[#16a34a]"
+            >
+              + Create Repair Order
+            </Link>
+          </div>
+        ) : (
+          <div className="space-y-3.5">
+            {filteredJobs.map((job) => {
+              const statusCfg = STATUS_CONFIG[job.status] || STATUS_CONFIG.created;
+              const customerName = job.customer?.name || "Client";
+              const vehicleDisplay = job.vehicle
+                ? `${job.vehicle.year} ${job.vehicle.make} ${job.vehicle.model}`
+                : "Vehicle";
+              const plate = job.vehicle?.license_plate || "PLATE";
+
               return (
                 <Link
                   key={job.id}
@@ -159,20 +229,18 @@ export default function JobsPage() {
                   <div className="flex items-center justify-between pb-3 border-b border-[#1f1f1f]">
                     <div className="flex items-center gap-2.5">
                       <span className="font-mono text-xs font-black text-[#22c55e] bg-[#22c55e]/10 px-2.5 py-1 rounded-md border border-[#22c55e]/25">
-                        {job.roNumber}
+                        {job.ro_number}
                       </span>
                       <span className="text-xs text-[#737373] font-medium">
-                        {job.date} · {job.appointmentTime}
+                        {new Date(job.created_at).toLocaleDateString()}
                       </span>
                     </div>
 
                     <span
                       className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusCfg.text} ${statusCfg.bg} border ${statusCfg.border}`}
                     >
-                      <span
-                        className={`h-1.5 w-1.5 rounded-full ${statusCfg.dot}`}
-                      />
-                      {statusCfg.label}
+                      <span className={`h-1.5 w-1.5 rounded-full ${statusCfg.dot}`} />
+                      {statusCfg.label} ({job.completion_percentage}%)
                     </span>
                   </div>
 
@@ -180,19 +248,19 @@ export default function JobsPage() {
                   <div className="pt-3.5 pb-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                     <div>
                       <h2 className="text-base font-bold text-white group-hover:text-[#22c55e] transition-colors">
-                        {job.customerName}
+                        {customerName}
                       </h2>
                       <p className="text-xs text-[#8e8e8e] mt-0.5">
-                        {job.vehicleYear} {job.vehicleMake} {job.vehicleModel}
+                        {vehicleDisplay}
                       </p>
                     </div>
 
                     <div className="flex items-center gap-3">
                       <span className="font-mono text-xs font-bold text-[#ededed] bg-[#1a1a1a] border border-[#282828] px-2.5 py-1 rounded-lg tracking-wider uppercase">
-                        {job.licensePlate}
+                        {plate}
                       </span>
                       <span className="font-mono text-base font-black text-[#22c55e]">
-                        {formatCurrency(job.estimateTotal)}
+                        {formatCurrency(job.total_amount)}
                       </span>
                     </div>
                   </div>
@@ -200,15 +268,15 @@ export default function JobsPage() {
                   {/* Service Concern */}
                   <p className="text-xs text-[#737373] line-clamp-1 mt-1">
                     <span className="text-neutral-400 font-semibold">
-                      {job.service}:
+                      {job.recommended_work || "Service"}:
                     </span>{" "}
-                    {job.concern}
+                    {job.customer_concern}
                   </p>
                 </Link>
               );
-            })
-          )}
-        </div>
+            })}
+          </div>
+        )}
       </div>
     </AppShell>
   );

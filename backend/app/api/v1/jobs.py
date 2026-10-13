@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, desc, func
+from sqlalchemy import select, and_, or_, desc, func
 from sqlalchemy.orm import selectinload
 from typing import List, Optional
 import uuid
@@ -12,6 +12,7 @@ from app.core.auth import AuthenticatedUser
 from app.core.websockets import ws_manager
 from app.models.job import RepairOrder, RepairOrderItem
 from app.models.customer import Customer
+from app.models.vehicle import Vehicle
 from app.models.workshop import Workshop
 from app.schemas.job import (
     RepairOrderCreate,
@@ -40,7 +41,11 @@ async def list_jobs(
     workshop_uuid = uuid.UUID(current_user.workshop_id)
     query = (
         select(RepairOrder)
-        .options(selectinload(RepairOrder.items))
+        .options(
+            selectinload(RepairOrder.items),
+            selectinload(RepairOrder.customer),
+            selectinload(RepairOrder.vehicle),
+        )
         .where(RepairOrder.workshop_id == workshop_uuid)
         .order_by(desc(RepairOrder.created_at))
     )
@@ -147,7 +152,18 @@ async def create_job(
     )
     db.add(new_ro)
     await db.flush()
-    await db.refresh(new_ro)
+    
+    # Reload with eager relationships to avoid MissingGreenlet
+    res = await db.execute(
+        select(RepairOrder)
+        .options(
+            selectinload(RepairOrder.items),
+            selectinload(RepairOrder.customer),
+            selectinload(RepairOrder.vehicle),
+        )
+        .where(RepairOrder.id == new_ro.id)
+    )
+    loaded_ro = res.scalar_one()
 
     # Broadcast to workshop board
     await ws_manager.broadcast_workshop(
@@ -155,8 +171,79 @@ async def create_job(
         {"event": "job_created", "ro_number": ro_number, "status": "created"}
     )
 
-    read_obj = RepairOrderRead.model_validate(new_ro)
-    read_obj.completion_percentage = compute_completion(new_ro.items)
+    read_obj = RepairOrderRead.model_validate(loaded_ro)
+    read_obj.completion_percentage = compute_completion(loaded_ro.items)
+    return read_obj
+
+@router.get("/portal/{token}", response_model=RepairOrderRead)
+async def get_portal_job(
+    token: str,
+    db: AsyncSession = DatabaseDep,
+):
+    or_clauses = [
+        RepairOrder.public_token == token,
+        func.lower(RepairOrder.ro_number) == token.lower(),
+    ]
+    try:
+        parsed_uuid = uuid.UUID(token)
+        or_clauses.append(RepairOrder.id == parsed_uuid)
+    except ValueError:
+        pass
+
+    query = (
+        select(RepairOrder)
+        .options(
+            selectinload(RepairOrder.items),
+            selectinload(RepairOrder.customer),
+            selectinload(RepairOrder.vehicle),
+        )
+        .where(or_(*or_clauses))
+    )
+    res = await db.execute(query)
+    ro = res.scalars().first()
+    if not ro:
+        raise HTTPException(status_code=404, detail="Repair order not found")
+    read_obj = RepairOrderRead.model_validate(ro)
+    read_obj.completion_percentage = compute_completion(ro.items)
+    return read_obj
+
+@router.get("/{job_id}", response_model=RepairOrderRead)
+async def get_job(
+    job_id: str,
+    db: AsyncSession = DatabaseDep,
+    current_user: AuthenticatedUser = CurrentUserDep,
+):
+    workshop_uuid = uuid.UUID(current_user.workshop_id)
+    or_clauses = [
+        func.lower(RepairOrder.ro_number) == job_id.lower(),
+        RepairOrder.public_token == job_id,
+    ]
+    try:
+        parsed_uuid = uuid.UUID(job_id)
+        or_clauses.append(RepairOrder.id == parsed_uuid)
+    except ValueError:
+        pass
+
+    query = (
+        select(RepairOrder)
+        .options(
+            selectinload(RepairOrder.items),
+            selectinload(RepairOrder.customer),
+            selectinload(RepairOrder.vehicle),
+        )
+        .where(
+            and_(
+                RepairOrder.workshop_id == workshop_uuid,
+                or_(*or_clauses)
+            )
+        )
+    )
+    res = await db.execute(query)
+    ro = res.scalars().first()
+    if not ro:
+        raise HTTPException(status_code=404, detail="Repair order not found")
+    read_obj = RepairOrderRead.model_validate(ro)
+    read_obj.completion_percentage = compute_completion(ro.items)
     return read_obj
 
 @router.patch("/{job_id}/status", response_model=RepairOrderRead)
@@ -169,7 +256,11 @@ async def update_job_status(
     workshop_uuid = uuid.UUID(current_user.workshop_id)
     query = (
         select(RepairOrder)
-        .options(selectinload(RepairOrder.items))
+        .options(
+            selectinload(RepairOrder.items),
+            selectinload(RepairOrder.customer),
+            selectinload(RepairOrder.vehicle),
+        )
         .where(
             and_(
                 RepairOrder.id == job_id,
@@ -184,7 +275,8 @@ async def update_job_status(
 
     ro.status = payload.status
     await db.flush()
-    await db.refresh(ro)
+    res = await db.execute(query)
+    ro = res.scalars().first()
 
     # Broadcast status change across garage screens
     await ws_manager.broadcast_workshop(

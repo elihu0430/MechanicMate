@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { MOCK_REPAIR_ORDERS } from "@/lib/mock-data";
+import { fetchJob, type RepairOrderRead } from "@/lib/api/jobs";
 
 interface DamagePin {
   id: string;
@@ -40,10 +40,17 @@ export default function JobDamageDiagramPage() {
   const params = useParams();
   const id = params?.id as string;
 
-  const job =
-    MOCK_REPAIR_ORDERS.find(
-      (j) => j.id === id || j.roNumber.toLowerCase() === id?.toLowerCase(),
-    ) || MOCK_REPAIR_ORDERS[0];
+  const [job, setJob] = useState<RepairOrderRead | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!id) return;
+    setLoading(true);
+    fetchJob(id)
+      .then((data) => setJob(data))
+      .catch((err) => console.error("Error loading job for damage diagram:", err))
+      .finally(() => setLoading(false));
+  }, [id]);
 
   const [activeView, setActiveView] = useState<
     "top" | "left" | "right" | "front" | "rear"
@@ -95,28 +102,42 @@ export default function JobDamageDiagramPage() {
 
   const currentViewPins = pins.filter((p) => p.view === activeView);
 
+  if (loading) {
+    return (
+      <div className="mx-auto max-w-4xl px-4 py-12 flex flex-col items-center justify-center space-y-4">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#22c55e] border-t-transparent" />
+        <p className="text-xs text-[#8c8c8c]">Loading vehicle schematic...</p>
+      </div>
+    );
+  }
+
+  const roNumber = job?.ro_number || id;
+  const plate = job?.vehicle?.license_plate || "Vehicle";
+  const vehicleDesc = job?.vehicle
+    ? `${job.vehicle.year} ${job.vehicle.make} ${job.vehicle.model}`
+    : "Vehicle Schematic";
+
   return (
     <div className="mx-auto max-w-4xl px-4 py-6 space-y-6">
       {/* Top Header & Navigation */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#212121] pb-5">
         <div>
           <Link
-            href={`/jobs/${job.id}`}
+            href={`/jobs/${job?.id || id}`}
             className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#8c8c8c] hover:text-white mb-1 transition-colors"
           >
-            <span>← Back to {job.roNumber} Overview</span>
+            <span>← Back to {roNumber} Overview</span>
           </Link>
           <div className="flex items-center gap-3">
             <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
               Vehicle Damage Mapping
             </h1>
             <span className="font-mono text-xs font-bold text-white bg-[#1a1a1a] border border-[#2e2e2e] px-2.5 py-1 rounded-lg">
-              {job.licensePlate}
+              {plate}
             </span>
           </div>
           <p className="text-xs text-[#737373] mt-1">
-            {job.vehicleYear} {job.vehicleMake} {job.vehicleModel} &bull; Tap
-            panels to plot damage pins
+            {vehicleDesc} &bull; Tap panels to plot damage pins
           </p>
         </div>
 

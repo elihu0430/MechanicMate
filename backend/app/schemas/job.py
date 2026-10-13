@@ -3,6 +3,8 @@ from typing import Optional, List
 from datetime import datetime
 import uuid
 
+from app.schemas.intake import CustomerSummary, VehicleRead
+
 class RepairOrderItemBase(BaseModel):
     item_type: str = "labour" # 'part', 'labour', 'tire', 'sublet'
     description: str
@@ -53,6 +55,8 @@ class RepairOrderRead(RepairOrderBase):
     created_at: datetime
     items: List[RepairOrderItemRead] = []
     completion_percentage: float = 0.0
+    customer: Optional[CustomerSummary] = None
+    vehicle: Optional[VehicleRead] = None
 
     class Config:
         from_attributes = True

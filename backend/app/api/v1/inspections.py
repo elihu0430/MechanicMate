@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, func
+from sqlalchemy import select, and_, or_, func
 from sqlalchemy.orm import selectinload
 from typing import List
 import uuid
@@ -77,6 +77,35 @@ async def create_inspection(
     await db.flush()
     await db.refresh(new_insp)
     return new_insp
+
+@router.get("/portal/{token}", response_model=InspectionRead)
+async def get_portal_inspection(
+    token: str,
+    db: AsyncSession = DatabaseDep,
+):
+    or_clauses = [
+        Inspection.public_token == token,
+        func.lower(Inspection.inspection_number) == token.lower(),
+    ]
+    try:
+        parsed_uuid = uuid.UUID(token)
+        or_clauses.append(Inspection.id == parsed_uuid)
+    except ValueError:
+        pass
+
+    query = (
+        select(Inspection)
+        .options(
+            selectinload(Inspection.checklist_items),
+            selectinload(Inspection.damage_pins)
+        )
+        .where(or_(*or_clauses))
+    )
+    res = await db.execute(query)
+    insp = res.scalars().first()
+    if not insp:
+        raise HTTPException(status_code=404, detail="Inspection session not found")
+    return insp
 
 @router.get("/{inspection_id}", response_model=InspectionRead)
 async def get_inspection(

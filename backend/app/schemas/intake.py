@@ -34,6 +34,9 @@ class CustomerSummary(BaseModel):
     is_tax_exempt: bool = False
     custom_labor_rate_hourly: Optional[float] = None
 
+    class Config:
+        from_attributes = True
+
 class IntakeLookupResponse(BaseModel):
     vehicle: VehicleRead
     customer: CustomerSummary
