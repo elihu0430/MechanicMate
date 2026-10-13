@@ -1,33 +1,80 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { AppShell } from "@/components/layout/AppShell";
-import {
-  MOCK_VEHICLES,
-  MOCK_REPAIR_ORDERS,
-  formatCurrency,
-} from "@/lib/mock-data";
+import { useApi, ApiVehicle, ApiRepairOrder } from "@/lib/api";
+import { formatCurrency, formatDate } from "@/lib/format";
 import { ComponentHistoryEntry } from "@/lib/types";
 
 export default function VehicleDetailPage() {
   const params = useParams();
   const id = params?.id as string;
+  const api = useApi();
 
-  const initialVehicle =
-    MOCK_VEHICLES.find(
-      (v) =>
-        v.id === id ||
-        v.plate.toLowerCase().replace(/\s+/g, "") ===
-          id?.toLowerCase().replace(/\s+/g, ""),
-    ) || MOCK_VEHICLES[0];
-
-  const [vehicle, setVehicle] = useState(initialVehicle);
+  const [vehicle, setVehicle] = useState<any>({
+    id: id || "",
+    make: "Loading",
+    model: "Vehicle",
+    year: new Date().getFullYear(),
+    plate: "...",
+    vin: "...",
+    mileageKm: 0,
+    status: "active",
+    componentHistory: [],
+  });
+  const [serviceHistory, setServiceHistory] = useState<ApiRepairOrder[]>([]);
+  const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"history" | "components">(
     "components",
   );
   const [showSwapModal, setShowSwapModal] = useState(false);
+
+  // Load real vehicle and service history from backend
+  const loadVehicleDetails = useCallback(async () => {
+    if (!id) return;
+    setLoading(true);
+
+    try {
+      const [v, jobs] = await Promise.all([
+        api.vehicles.get(id),
+        api.jobs.list(),
+      ]);
+      if (v) {
+        setVehicle({
+          id: v.id,
+          customerId: v.customer_id,
+          year: v.year,
+          make: v.make,
+          model: v.model,
+          color: v.color || "Standard",
+          plate: v.license_plate,
+          vin: v.vin || "Not recorded",
+          mileageKm: v.mileage_km,
+          status: v.status === "in_shop" ? "in-shop" : "active",
+          componentHistory: [],
+        });
+        setSwapMileage(v.mileage_km.toString());
+
+        const matchedJobs = jobs.filter(
+          (j) =>
+            j.vehicle_id === v.id ||
+            j.vehicle?.license_plate?.toLowerCase().replace(/\s+/g, "") ===
+              v.license_plate.toLowerCase().replace(/\s+/g, "")
+        );
+        setServiceHistory(matchedJobs);
+      }
+    } catch (err) {
+      console.error("Error loading vehicle details:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, [api, id]);
+
+  useEffect(() => {
+    loadVehicleDetails();
+  }, [loadVehicleDetails]);
 
   // New Swap Form State
   const [swapType, setSwapType] = useState<"engine" | "chassis">("engine");
@@ -40,11 +87,7 @@ export default function VehicleDetailPage() {
     vehicle.mileageKm.toString(),
   );
 
-  const serviceHistory = MOCK_REPAIR_ORDERS.filter(
-    (j) => j.vehicleId === vehicle.id,
-  );
-
-  const componentHistory = vehicle.componentHistory || [];
+  const componentHistory: ComponentHistoryEntry[] = vehicle.componentHistory || [];
   const engineHistory = componentHistory.filter(
     (c) => c.componentType === "engine",
   );
@@ -459,16 +502,18 @@ export default function VehicleDetailPage() {
                   >
                     <div className="flex items-center justify-between text-xs">
                       <span className="font-mono font-bold text-[#22c55e]">
-                        {job.roNumber}
+                        {job.ro_number}
                       </span>
-                      <span className="text-[#737373]">{job.date}</span>
+                      <span className="text-[#737373]">{formatDate(job.created_at)}</span>
                     </div>
                     <h3 className="font-bold text-white text-sm mt-1">
-                      {job.service}
+                      {job.customer_concern}
                     </h3>
-                    <p className="text-xs text-[#8e8e8e] mt-1 line-clamp-1">
-                      {job.concern}
-                    </p>
+                    {job.diagnosis && (
+                      <p className="text-xs text-[#8e8e8e] mt-1 line-clamp-1">
+                        {job.diagnosis}
+                      </p>
+                    )}
                     <div className="flex items-center justify-between text-xs text-[#737373] mt-2 pt-2 border-t border-[#222]">
                       <span>
                         Status:{" "}
@@ -477,7 +522,7 @@ export default function VehicleDetailPage() {
                         </strong>
                       </span>
                       <span className="font-mono font-bold text-neutral-200">
-                        {formatCurrency(job.estimateTotal)}
+                        {formatCurrency(job.total_amount)}
                       </span>
                     </div>
                   </Link>

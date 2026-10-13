@@ -3,24 +3,22 @@
 import React, { useState } from "react";
 import { AppShell } from "@/components/layout/AppShell";
 import { SignOutButton } from "@/components/auth/SignOutButton";
-import { MOCK_WORKSHOP, MOCK_USER, formatCurrency } from "@/lib/mock-data";
+import { formatCurrency } from "@/lib/format";
 
 export default function SettingsPage() {
   // Workshop Profile State
-  const [workshopName, setWorkshopName] = useState(MOCK_WORKSHOP.name);
-  const [vatNumber, setVatNumber] = useState(MOCK_WORKSHOP.vatNumber);
-  const [phone, setPhone] = useState(MOCK_WORKSHOP.phone);
-  const [email, setEmail] = useState(MOCK_WORKSHOP.email);
-  const [address, setAddress] = useState(MOCK_WORKSHOP.address);
+  const [workshopName, setWorkshopName] = useState("MechanicMate Dev Workshop");
+  const [vatNumber, setVatNumber] = useState("ZA-4902188201");
+  const [phone, setPhone] = useState("+27 11 482 9900");
+  const [email, setEmail] = useState("service@mechanicmate.co.za");
+  const [address, setAddress] = useState(
+    "Unit 4, Industrial Park, 14 Main Reef Road, Johannesburg, 2092"
+  );
 
   // Financial & Rate Settings State
-  const [labourRate, setLabourRate] = useState(
-    MOCK_WORKSHOP.labourRateHourly.toString(),
-  );
-  const [taxRate, setTaxRate] = useState(
-    MOCK_WORKSHOP.taxRatePercent.toString(),
-  );
-  const [currency, setCurrency] = useState(MOCK_WORKSHOP.currency);
+  const [labourRate, setLabourRate] = useState("480");
+  const [taxRate, setTaxRate] = useState("15.0");
+  const [currency, setCurrency] = useState("ZAR");
   const [paymentTerms, setPaymentTerms] = useState("7");
   const [diagnosticFee, setDiagnosticFee] = useState("350");
 
@@ -33,16 +31,16 @@ export default function SettingsPage() {
   const [teamMembers] = useState([
     {
       id: "u1",
-      name: MOCK_USER.name,
-      email: MOCK_USER.email,
-      role: MOCK_USER.role,
+      name: "Lead Master Technician",
+      email: "master.tech@mechanicmate.co.za",
+      role: "Lead Master Technician",
       active: true,
       badge: "Lead Tech",
     },
     {
       id: "u2",
       name: "Sipho Khumalo",
-      email: "sipho.k@devsauto.co.za",
+      email: "sipho.k@mechanicmate.co.za",
       role: "Apprentice Technician",
       active: true,
       badge: "Bay 2",
@@ -510,7 +508,7 @@ export default function SettingsPage() {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl bg-[#181818] border border-[#262626]">
               <div className="space-y-1">
                 <p className="text-sm font-bold text-white">
-                  Active Terminal: {MOCK_USER.name} ({MOCK_USER.email})
+                  Active Terminal: Lead Master Technician (master.tech@mechanicmate.co.za)
                 </p>
                 <p className="text-xs text-[#8a8a8a]">
                   Signed in with Lead Technician privileges for {workshopName}.
