@@ -12,15 +12,16 @@ export default function SignInPage() {
     setMounted(true);
   }, []);
 
-  const clerkKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
-  const isClerkAvailable = Boolean(
-    mounted &&
-    clerkKey &&
-    !clerkKey.includes("YOUR_") &&
-    clerkKey.startsWith("pk_"),
-  );
+  if (!mounted) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 gap-3">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#22c55e] border-t-transparent" />
+        <p className="text-xs text-neutral-400">Loading sign in...</p>
+      </div>
+    );
+  }
 
-  return isClerkAvailable ? <ClerkSignInInner /> : <DemoSignInInner />;
+  return <ClerkSignInInner />;
 }
 
 // ─── Real Clerk Custom Sign-In Component ─────────────────────────────────────
@@ -35,6 +36,12 @@ function ClerkSignInInner() {
   const [loading, setLoading] = useState(false);
   const [oauthLoading, setOauthLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [infoMsg, setInfoMsg] = useState<string | null>(null);
+
+  // Email Code / OTP sub-state (for accounts without password strategy configured)
+  const [otpMode, setOtpMode] = useState(false);
+  const [otpCode, setOtpCode] = useState("");
+  const [emailAddressId, setEmailAddressId] = useState<string | null>(null);
 
   // Forgot password sub-state
   const [forgotMode, setForgotMode] = useState(false);
@@ -53,6 +60,7 @@ function ClerkSignInInner() {
     e.preventDefault();
     if (!isLoaded || !signIn) return;
     setErrorMsg(null);
+    setInfoMsg(null);
 
     // Validation
     if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -67,26 +75,68 @@ function ClerkSignInInner() {
     setLoading(true);
 
     try {
-      const result = await signIn.create({
+      // 1. First initiate sign-in with identifier to inspect supported strategies
+      const initAttempt = await signIn.create({
         identifier: email.trim(),
-        password,
       });
 
-      if (result.status === "complete") {
+      if (initAttempt.status === "complete") {
         if (rememberMe) {
           localStorage.setItem("mm_remembered_email", email.trim());
-        } else {
-          localStorage.removeItem("mm_remembered_email");
         }
-        if (result.createdSessionId) {
-          await setActive({ session: result.createdSessionId });
+        if (initAttempt.createdSessionId) {
+          await setActive({ session: initAttempt.createdSessionId });
         }
         window.location.href = "/";
-      } else {
-        console.log("Sign-in incomplete status:", result.status);
-        setErrorMsg(
-          `Authentication requires additional step: ${result.status}`,
-        );
+        return;
+      }
+
+      if (initAttempt.status === "needs_first_factor") {
+        const factors = initAttempt.supportedFirstFactors || [];
+        const hasPassword = factors.some((f: any) => f.strategy === "password");
+        const emailCodeFactor = factors.find((f: any) => f.strategy === "email_code") as any;
+
+        if (hasPassword) {
+          // Password strategy is valid for this account
+          const result = await signIn.attemptFirstFactor({
+            strategy: "password",
+            password,
+          });
+
+          if (result.status === "complete") {
+            if (rememberMe) {
+              localStorage.setItem("mm_remembered_email", email.trim());
+            } else {
+              localStorage.removeItem("mm_remembered_email");
+            }
+            if (result.createdSessionId) {
+              await setActive({ session: result.createdSessionId });
+            }
+            window.location.href = "/";
+            return;
+          } else {
+            setErrorMsg(`Authentication requires additional step: ${result.status}`);
+          }
+        } else if (emailCodeFactor) {
+          // Account was created with email OTP code (password strategy not enabled/configured)
+          setEmailAddressId(emailCodeFactor.emailAddressId);
+          await signIn.prepareFirstFactor({
+            strategy: "email_code",
+            emailAddressId: emailCodeFactor.emailAddressId,
+          });
+          setOtpMode(true);
+          setInfoMsg("A 6-digit verification code has been dispatched to your email address.");
+        } else {
+          // Fallback direct attempt
+          const result = await signIn.create({
+            identifier: email.trim(),
+            password,
+          });
+          if (result.status === "complete" && result.createdSessionId) {
+            await setActive({ session: result.createdSessionId });
+            window.location.href = "/";
+          }
+        }
       }
     } catch (err: unknown) {
       console.error("Clerk sign-in error:", err);
@@ -97,22 +147,69 @@ function ClerkSignInInner() {
           code?: string;
         }>;
       };
-      if (clerkError.errors && clerkError.errors.length > 0) {
-        const first = clerkError.errors[0];
-        if (first.code === "form_identifier_not_found") {
-          setErrorMsg(
-            "No workshop account found with this email. Please sign up.",
-          );
-        } else if (first.code === "form_password_incorrect") {
-          setErrorMsg("Incorrect password or security PIN. Please try again.");
-        } else {
-          setErrorMsg(
-            first.longMessage || first.message || "Failed to authenticate.",
-          );
+
+      const first = clerkError.errors?.[0];
+      const errMsg = first?.message || "";
+      const isStrategyMismatch =
+        first?.code === "strategy_for_user_invalid" ||
+        errMsg.toLowerCase().includes("verification strategy is not valid");
+
+      if (isStrategyMismatch) {
+        // Fallback: Dispatch email code OTP automatically
+        try {
+          const fallbackAttempt = await signIn.create({ identifier: email.trim() });
+          const factors = fallbackAttempt.supportedFirstFactors || [];
+          const emailCodeFactor = factors.find((f: any) => f.strategy === "email_code") as any;
+          if (emailCodeFactor) {
+            setEmailAddressId(emailCodeFactor.emailAddressId);
+            await signIn.prepareFirstFactor({
+              strategy: "email_code",
+              emailAddressId: emailCodeFactor.emailAddressId,
+            });
+            setOtpMode(true);
+            setInfoMsg("Password authentication is disabled for this account. A verification code was sent to your email.");
+            return;
+          }
+        } catch (fbErr) {
+          console.error("Fallback OTP dispatch failed:", fbErr);
         }
-      } else {
-        setErrorMsg("Unable to sign in. Please verify your credentials.");
       }
+
+      if (first?.code === "form_identifier_not_found") {
+        setErrorMsg("No workshop account found with this email. Please sign up.");
+      } else if (first?.code === "form_password_incorrect") {
+        setErrorMsg("Incorrect password or security PIN. Please try again.");
+      } else {
+        setErrorMsg(first?.longMessage || first?.message || "Failed to authenticate.");
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isLoaded || !signIn || !otpCode.trim()) return;
+    setLoading(true);
+    setErrorMsg(null);
+
+    try {
+      const result = await signIn.attemptFirstFactor({
+        strategy: "email_code",
+        code: otpCode.trim(),
+      });
+
+      if (result.status === "complete") {
+        if (result.createdSessionId) {
+          await setActive({ session: result.createdSessionId });
+        }
+        window.location.href = "/";
+      } else {
+        setErrorMsg(`Authentication status: ${result.status}`);
+      }
+    } catch (err: any) {
+      console.error("OTP verification error:", err);
+      setErrorMsg(err?.errors?.[0]?.message || "Invalid or expired verification code.");
     } finally {
       setLoading(false);
     }
@@ -200,7 +297,11 @@ function ClerkSignInInner() {
       {/* ─── Top Header & Close Button ──────────────────────────────── */}
       <div className="flex items-center justify-between">
         <h1 className="text-base sm:text-lg font-bold text-white tracking-tight">
-          {forgotMode ? "Reset Workshop Password" : "Sign in to MechanicMate"}
+          {otpMode
+            ? "Enter Email Verification Code"
+            : forgotMode
+            ? "Reset Workshop Password"
+            : "Sign in to MechanicMate"}
         </h1>
         <Link
           href="/"
@@ -234,8 +335,56 @@ function ClerkSignInInner() {
         </div>
       )}
 
-      {/* Forgot Password View */}
-      {forgotMode ? (
+      {/* Info Alert */}
+      {infoMsg && (
+        <div className="rounded-xl bg-[#38bdf8]/10 border border-[#38bdf8]/30 p-3 flex items-start gap-2.5 text-xs text-[#38bdf8] animate-in fade-in duration-200">
+          <span className="text-sm shrink-0">ℹ️</span>
+          <p className="flex-1">{infoMsg}</p>
+        </div>
+      )}
+
+      {/* OTP Mode View */}
+      {otpMode ? (
+        <form onSubmit={handleVerifyOtp} className="space-y-4">
+          <p className="text-xs text-[#8a8a8a]">
+            Enter the 6-digit code sent to <strong className="text-white">{email}</strong> to sign in.
+          </p>
+          <div className="space-y-1">
+            <label className="text-[11px] font-black tracking-wider uppercase text-[#737373]">
+              6-DIGIT VERIFICATION CODE
+            </label>
+            <input
+              type="text"
+              required
+              autoFocus
+              maxLength={6}
+              value={otpCode}
+              onChange={(e) => setOtpCode(e.target.value)}
+              placeholder="123456"
+              className="w-full text-center tracking-[0.4em] font-mono font-bold text-lg rounded-xl bg-[#1a1a1a] border border-[#282828] px-3.5 py-2.5 text-white focus:border-[#22c55e] focus:outline-none min-h-[46px]"
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full min-h-[46px] rounded-xl bg-[#22c55e] font-black text-sm text-black hover:bg-[#16a34a] shadow-lg shadow-emerald-950/20 transition-all flex items-center justify-center gap-2"
+          >
+            {loading ? "Verifying... ⏳" : "Verify & Sign In →"}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setOtpMode(false);
+              setOtpCode("");
+              setInfoMsg(null);
+            }}
+            className="w-full text-center text-xs text-[#8a8a8a] hover:text-white pt-1"
+          >
+            ← Back to password sign-in
+          </button>
+        </form>
+      ) : forgotMode ? (
+        /* Forgot Password View */
         <div className="space-y-4">
           {!codeSent ? (
             <div className="space-y-3">
@@ -249,44 +398,40 @@ function ClerkSignInInner() {
                 </label>
                 <input
                   type="email"
+                  required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="alex@workshop.co.za"
+                  placeholder="technician@workshop.co.za"
                   className="w-full rounded-xl bg-[#1a1a1a] border border-[#282828] px-3.5 py-2.5 text-sm text-white focus:border-[#22c55e] focus:outline-none min-h-[44px]"
                 />
               </div>
               <button
                 type="button"
-                onClick={handleSendResetCode}
                 disabled={loading}
+                onClick={handleSendResetCode}
                 className="w-full min-h-[46px] rounded-xl bg-[#22c55e] font-black text-sm text-black hover:bg-[#16a34a] transition-all flex items-center justify-center"
               >
                 {loading ? "Sending code... ⏳" : "Send Reset Code →"}
               </button>
             </div>
           ) : resetSuccess ? (
-            <div className="rounded-xl bg-[#22c55e]/15 border border-[#22c55e]/30 p-4 text-center space-y-1">
-              <span className="text-2xl">✅</span>
-              <p className="text-xs font-bold text-[#22c55e]">
-                Password Reset Successfully!
-              </p>
-              <p className="text-[11px] text-[#86efac]">
-                Redirecting you to your workshop bay...
-              </p>
+            <div className="rounded-xl bg-[#22c55e]/10 border border-[#22c55e]/30 p-4 text-center space-y-1 text-xs text-[#22c55e]">
+              <p className="font-bold text-sm">✓ Password Reset Successful!</p>
+              <p className="text-[#a3e635]">Redirecting to dashboard...</p>
             </div>
           ) : (
             <form onSubmit={handleResetPassword} className="space-y-3">
               <div className="space-y-1">
                 <label className="text-[11px] font-black tracking-wider uppercase text-[#737373]">
-                  6-DIGIT VERIFICATION CODE
+                  6-DIGIT CODE
                 </label>
                 <input
                   type="text"
-                  maxLength={6}
+                  required
                   value={resetCode}
                   onChange={(e) => setResetCode(e.target.value)}
                   placeholder="123456"
-                  className="w-full rounded-xl bg-[#1a1a1a] border border-[#282828] px-3.5 py-2.5 text-sm font-mono text-white text-center tracking-widest focus:border-[#22c55e] focus:outline-none min-h-[44px]"
+                  className="w-full font-mono text-center tracking-widest rounded-xl bg-[#1a1a1a] border border-[#282828] px-3.5 py-2.5 text-sm text-white focus:border-[#22c55e] focus:outline-none min-h-[44px]"
                 />
               </div>
               <div className="space-y-1">
@@ -295,6 +440,7 @@ function ClerkSignInInner() {
                 </label>
                 <input
                   type="password"
+                  required
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
                   placeholder="Min. 8 characters"
@@ -336,7 +482,7 @@ function ClerkSignInInner() {
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="alex@workshop.co.za"
+              placeholder="technician@workshop.co.za"
               className="w-full rounded-xl bg-[#1a1a1a] border border-[#282828] px-3.5 py-2.5 text-sm text-white placeholder-[#555] focus:border-[#22c55e] focus:outline-none min-h-[44px] transition-colors"
             />
           </div>
@@ -353,8 +499,8 @@ function ClerkSignInInner() {
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••••••"
-                className="w-full rounded-xl bg-[#1a1a1a] border border-[#282828] pl-3.5 pr-11 py-2.5 text-sm text-white placeholder-[#555] focus:border-[#22c55e] focus:outline-none min-h-[44px] transition-colors font-mono"
+                placeholder="Enter your password"
+                className="w-full rounded-xl bg-[#1a1a1a] border border-[#282828] pl-3.5 pr-11 py-2.5 text-sm text-white placeholder-[#555] focus:border-[#22c55e] focus:outline-none min-h-[44px] transition-colors"
               />
               <button
                 type="button"
@@ -418,6 +564,7 @@ function ClerkSignInInner() {
               onClick={() => {
                 setForgotMode(true);
                 setErrorMsg(null);
+                setInfoMsg(null);
               }}
               className="font-semibold text-[#22c55e] hover:underline"
             >
@@ -449,23 +596,22 @@ function ClerkSignInInner() {
               <span>Connecting Google... ⏳</span>
             ) : (
               <>
-                {/* Official Google 4-Color G Icon */}
-                <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24">
+                <svg className="h-4 w-4" viewBox="0 0 24 24">
                   <path
                     fill="#4285F4"
-                    d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"
+                    d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
                   />
                   <path
                     fill="#34A853"
-                    d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.33 24 12 24z"
+                    d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
                   />
                   <path
                     fill="#FBBC05"
-                    d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 9.98 0 12s.45 3.82 1.25 5.42l4.03-3.15z"
+                    d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
                   />
                   <path
                     fill="#EA4335"
-                    d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"
+                    d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
                   />
                 </svg>
                 <span>Continue with Google</span>
@@ -475,203 +621,15 @@ function ClerkSignInInner() {
         </form>
       )}
 
-      {/* Footer Navigation */}
-      <div className="text-center pt-2 border-t border-[#1f1f1f]">
-        <p className="text-xs text-[#737373]">
-          No account?{" "}
-          <Link
-            href="/sign-up"
-            className="font-bold text-[#22c55e] hover:underline"
-          >
-            Sign up free
-          </Link>
-        </p>
-      </div>
-    </div>
-  );
-}
-
-// ─── Demo Simulation Mode Component (When Clerk Keys are Pending) ─────────────
-function DemoSignInInner() {
-  const router = useRouter();
-  const [email, setEmail] = useState("alex@workshop.co.za");
-  const [password, setPassword] = useState("••••••••••••");
-  const [showPassword, setShowPassword] = useState(false);
-  const [rememberMe, setRememberMe] = useState(true);
-  const [loading, setLoading] = useState(false);
-
-  const handleDemoSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setTimeout(() => {
-      router.push("/");
-    }, 500);
-  };
-
-  return (
-    <div className="space-y-5">
-      {/* ─── Top Header & Close Button ──────────────────────────────── */}
-      <div className="flex items-center justify-between">
-        <h1 className="text-base sm:text-lg font-bold text-white tracking-tight">
-          Sign in to MechanicMate
-        </h1>
+      {/* ─── Footer Sign-Up Link ────────────────────────────────────── */}
+      <div className="pt-2 text-center text-xs text-[#8a8a8a] border-t border-[#1c1c1c]">
+        Need a workshop account?{" "}
         <Link
-          href="/"
-          className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#1f1f1f] text-[#888] hover:text-white hover:bg-[#282828] transition-colors"
-          aria-label="Close"
+          href="/sign-up"
+          className="font-bold text-[#22c55e] hover:underline"
         >
-          ✕
+          Create one here →
         </Link>
-      </div>
-
-      {/* ─── Brand Card Banner ──────────────────────────────────────── */}
-      <div className="flex items-center gap-3.5 rounded-2xl bg-[#142318] border border-[#22c55e]/25 p-3.5 shadow-inner">
-        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#22c55e] text-black font-black text-lg shadow-sm">
-          M
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-black text-white leading-tight">
-            MechanicMate
-          </p>
-          <p className="text-xs text-[#86efac] leading-tight mt-0.5 font-medium">
-            Workshop Management System & Digital Bay Access
-          </p>
-        </div>
-      </div>
-
-      {/* Notice Pill */}
-      <div className="rounded-xl bg-[#1a1a1a] border border-[#f59e0b]/30 p-3 space-y-1.5 text-xs">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="h-2 w-2 rounded-full bg-[#f59e0b] animate-pulse" />
-            <span className="font-bold text-[#f59e0b]">
-              Local Demo Mode (Clerk Keys Pending)
-            </span>
-          </div>
-          <span className="font-mono text-[10px] text-[#a3a3a3] uppercase">
-            Simulation
-          </span>
-        </div>
-        <p className="text-[11px] text-[#8a8a8a] leading-relaxed">
-          Sign-ins here are simulated locally. Add your{" "}
-          <code className="text-white font-mono bg-[#141414] px-1 py-0.5 rounded">
-            NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
-          </code>{" "}
-          to{" "}
-          <code className="text-white font-mono bg-[#141414] px-1 py-0.5 rounded">
-            .env.local
-          </code>{" "}
-          to record live users in your Clerk Dashboard.
-        </p>
-      </div>
-
-      <form onSubmit={handleDemoSubmit} className="space-y-4">
-        {/* Email Input */}
-        <div className="space-y-1">
-          <label className="text-[11px] font-black tracking-wider uppercase text-[#737373]">
-            EMAIL
-          </label>
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="w-full rounded-xl bg-[#1a1a1a] border border-[#282828] px-3.5 py-2.5 text-sm text-white focus:border-[#22c55e] focus:outline-none min-h-[44px]"
-          />
-        </div>
-
-        {/* Password Input */}
-        <div className="space-y-1">
-          <label className="text-[11px] font-black tracking-wider uppercase text-[#737373]">
-            PASSWORD
-          </label>
-          <div className="relative">
-            <input
-              type={showPassword ? "text" : "password"}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-xl bg-[#1a1a1a] border border-[#282828] pl-3.5 pr-11 py-2.5 text-sm text-white font-mono focus:border-[#22c55e] focus:outline-none min-h-[44px]"
-            />
-            <button
-              type="button"
-              onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-[#737373] hover:text-white p-1"
-            >
-              {showPassword ? "🙈" : "👁️"}
-            </button>
-          </div>
-        </div>
-
-        {/* Remember me & Forgot Password */}
-        <div className="flex items-center justify-between text-xs pt-0.5 select-none">
-          <label className="flex items-center gap-2 text-[#8a8a8a] cursor-pointer hover:text-white">
-            <input
-              type="checkbox"
-              checked={rememberMe}
-              onChange={(e) => setRememberMe(e.target.checked)}
-              className="h-4 w-4 rounded bg-[#1a1a1a] border-[#2c2c2c] accent-[#22c55e]"
-            />
-            <span>Remember me</span>
-          </label>
-          <span className="font-semibold text-[#22c55e] hover:underline cursor-pointer">
-            Forgot password?
-          </span>
-        </div>
-
-        {/* Primary Submit */}
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full min-h-[46px] rounded-xl bg-[#22c55e] font-black text-sm text-black hover:bg-[#16a34a] shadow-lg shadow-emerald-950/20 active:scale-[0.99] transition-all flex items-center justify-center gap-2 select-none touch-manipulation"
-        >
-          {loading ? (
-            <span>Signing in... ⏳</span>
-          ) : (
-            <span>Sign In to Workshop →</span>
-          )}
-        </button>
-
-        {/* Continue with Google */}
-        <button
-          type="button"
-          onClick={() => {
-            setLoading(true);
-            setTimeout(() => router.push("/"), 500);
-          }}
-          className="w-full min-h-[46px] rounded-xl bg-[#1c1c1c] border border-[#2a2a2a] hover:bg-[#242424] font-bold text-xs text-white transition-all flex items-center justify-center gap-2.5 select-none touch-manipulation"
-        >
-          <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24">
-            <path
-              fill="#4285F4"
-              d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"
-            />
-            <path
-              fill="#34A853"
-              d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.33 24 12 24z"
-            />
-            <path
-              fill="#FBBC05"
-              d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 9.98 0 12s.45 3.82 1.25 5.42l4.03-3.15z"
-            />
-            <path
-              fill="#EA4335"
-              d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"
-            />
-          </svg>
-          <span>Continue with Google</span>
-        </button>
-      </form>
-
-      {/* Footer */}
-      <div className="text-center pt-2 border-t border-[#1f1f1f]">
-        <p className="text-xs text-[#737373]">
-          No account?{" "}
-          <Link
-            href="/sign-up"
-            className="font-bold text-[#22c55e] hover:underline"
-          >
-            Sign up free
-          </Link>
-        </p>
       </div>
     </div>
   );

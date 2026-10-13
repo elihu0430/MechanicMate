@@ -12,15 +12,16 @@ export default function SignUpPage() {
     setMounted(true);
   }, []);
 
-  const clerkKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
-  const isClerkAvailable = Boolean(
-    mounted &&
-    clerkKey &&
-    !clerkKey.includes("YOUR_") &&
-    clerkKey.startsWith("pk_"),
-  );
+  if (!mounted) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 gap-3">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#22c55e] border-t-transparent" />
+        <p className="text-xs text-neutral-400">Loading registration...</p>
+      </div>
+    );
+  }
 
-  return isClerkAvailable ? <ClerkSignUpInner /> : <DemoSignUpInner />;
+  return <ClerkSignUpInner />;
 }
 
 // ─── Real Clerk Custom Sign-Up Component ─────────────────────────────────────
@@ -368,7 +369,7 @@ function ClerkSignUpInner() {
               required
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
-              placeholder="e.g. Alex Ndlovu"
+              placeholder="e.g. John Doe"
               className="w-full rounded-xl bg-[#1a1a1a] border border-[#282828] px-3.5 py-2.5 text-sm text-white placeholder-[#555] focus:border-[#22c55e] focus:outline-none min-h-[44px]"
             />
           </div>
@@ -384,7 +385,7 @@ function ClerkSignUpInner() {
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="alex@workshop.co.za"
+              placeholder="technician@workshop.co.za"
               className="w-full rounded-xl bg-[#1a1a1a] border border-[#282828] px-3.5 py-2.5 text-sm text-white placeholder-[#555] focus:border-[#22c55e] focus:outline-none min-h-[44px]"
             />
           </div>
@@ -486,183 +487,6 @@ function ClerkSignUpInner() {
       </div>
 
       {/* Footer */}
-      <div className="text-center pt-1 border-t border-[#1f1f1f]">
-        <p className="text-xs text-[#737373]">
-          Already registered?{" "}
-          <Link
-            href="/sign-in"
-            className="font-bold text-[#22c55e] hover:underline"
-          >
-            Sign In
-          </Link>
-        </p>
-      </div>
-    </div>
-  );
-}
-
-// ─── Demo Simulation Mode Component ──────────────────────────────────────────
-function DemoSignUpInner() {
-  const router = useRouter();
-  const [workshopName, setWorkshopName] = useState("Dev's Auto Workshop");
-  const [fullName, setFullName] = useState("Alex Ndlovu");
-  const [email, setEmail] = useState("alex@workshop.co.za");
-  const [password, setPassword] = useState("••••••••••••");
-  const [loading, setLoading] = useState(false);
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setTimeout(() => {
-      router.push("/");
-    }, 500);
-  };
-
-  return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <h1 className="text-base sm:text-lg font-bold text-white tracking-tight">
-          Register Workshop Account
-        </h1>
-        <Link
-          href="/"
-          className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#1f1f1f] text-[#888] hover:text-white"
-        >
-          ✕
-        </Link>
-      </div>
-
-      <div className="flex items-center gap-3.5 rounded-2xl bg-[#142318] border border-[#22c55e]/25 p-3.5 shadow-inner">
-        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#22c55e] text-black font-black text-lg shadow-sm">
-          M
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-black text-white leading-tight">
-            MechanicMate
-          </p>
-          <p className="text-xs text-[#86efac] leading-tight mt-0.5 font-medium">
-            Multi-Bay Workshop System & Repair Order Management
-          </p>
-        </div>
-      </div>
-
-      {/* Notice Pill */}
-      <div className="rounded-xl bg-[#1a1a1a] border border-[#f59e0b]/30 p-3 space-y-1.5 text-xs">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="h-2 w-2 rounded-full bg-[#f59e0b] animate-pulse" />
-            <span className="font-bold text-[#f59e0b]">
-              Local Demo Mode (Clerk Keys Pending)
-            </span>
-          </div>
-          <span className="font-mono text-[10px] text-[#a3a3a3] uppercase">
-            Simulation
-          </span>
-        </div>
-        <p className="text-[11px] text-[#8a8a8a] leading-relaxed">
-          Registrations here are simulated locally. Add your{" "}
-          <code className="text-white font-mono bg-[#141414] px-1 py-0.5 rounded">
-            NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
-          </code>{" "}
-          to{" "}
-          <code className="text-white font-mono bg-[#141414] px-1 py-0.5 rounded">
-            .env.local
-          </code>{" "}
-          to record live users in your Clerk Dashboard.
-        </p>
-      </div>
-
-      <form onSubmit={handleSubmit} className="space-y-3.5">
-        <div className="space-y-1">
-          <label className="text-[11px] font-black tracking-wider uppercase text-[#737373]">
-            WORKSHOP TRADE NAME
-          </label>
-          <input
-            type="text"
-            value={workshopName}
-            onChange={(e) => setWorkshopName(e.target.value)}
-            className="w-full rounded-xl bg-[#1a1a1a] border border-[#282828] px-3.5 py-2.5 text-sm text-white focus:border-[#22c55e] focus:outline-none min-h-[44px]"
-          />
-        </div>
-
-        <div className="space-y-1">
-          <label className="text-[11px] font-black tracking-wider uppercase text-[#737373]">
-            LEAD MASTER TECHNICIAN
-          </label>
-          <input
-            type="text"
-            value={fullName}
-            onChange={(e) => setFullName(e.target.value)}
-            className="w-full rounded-xl bg-[#1a1a1a] border border-[#282828] px-3.5 py-2.5 text-sm text-white focus:border-[#22c55e] focus:outline-none min-h-[44px]"
-          />
-        </div>
-
-        <div className="space-y-1">
-          <label className="text-[11px] font-black tracking-wider uppercase text-[#737373]">
-            WORK EMAIL
-          </label>
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="w-full rounded-xl bg-[#1a1a1a] border border-[#282828] px-3.5 py-2.5 text-sm text-white focus:border-[#22c55e] focus:outline-none min-h-[44px]"
-          />
-        </div>
-
-        <div className="space-y-1">
-          <label className="text-[11px] font-black tracking-wider uppercase text-[#737373]">
-            PASSWORD
-          </label>
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="w-full rounded-xl bg-[#1a1a1a] border border-[#282828] px-3.5 py-2.5 text-sm text-white font-mono focus:border-[#22c55e] focus:outline-none min-h-[44px]"
-          />
-        </div>
-
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full min-h-[46px] rounded-xl bg-[#22c55e] font-black text-sm text-black hover:bg-[#16a34a] shadow-lg shadow-emerald-950/20 active:scale-[0.99] transition-all flex items-center justify-center gap-2 select-none touch-manipulation mt-1"
-        >
-          {loading ? (
-            <span>Creating workshop... ⏳</span>
-          ) : (
-            <span>Create Workshop Account →</span>
-          )}
-        </button>
-
-        <button
-          type="button"
-          onClick={() => {
-            setLoading(true);
-            setTimeout(() => router.push("/"), 500);
-          }}
-          className="w-full min-h-[46px] rounded-xl bg-[#1c1c1c] border border-[#2a2a2a] hover:bg-[#242424] font-bold text-xs text-white transition-all flex items-center justify-center gap-2.5 select-none touch-manipulation"
-        >
-          <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24">
-            <path
-              fill="#4285F4"
-              d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"
-            />
-            <path
-              fill="#34A853"
-              d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.33 24 12 24z"
-            />
-            <path
-              fill="#FBBC05"
-              d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 9.98 0 12s.45 3.82 1.25 5.42l4.03-3.15z"
-            />
-            <path
-              fill="#EA4335"
-              d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"
-            />
-          </svg>
-          <span>Continue with Google</span>
-        </button>
-      </form>
-
       <div className="text-center pt-1 border-t border-[#1f1f1f]">
         <p className="text-xs text-[#737373]">
           Already registered?{" "}

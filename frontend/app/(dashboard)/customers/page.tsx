@@ -1,23 +1,40 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { AppShell } from "@/components/layout/AppShell";
-import { MOCK_CUSTOMERS, formatCurrency } from "@/lib/mock-data";
+import { useApi, ApiCustomer } from "@/lib/api";
+import { formatCurrency } from "@/lib/format";
 
 export default function CustomersPage() {
+  const api = useApi();
   const [search, setSearch] = useState("");
+  const [customers, setCustomers] = useState<ApiCustomer[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const filteredCustomers = MOCK_CUSTOMERS.filter((c) => {
-    const q = search.toLowerCase();
-    return (
-      !q ||
-      c.name.toLowerCase().includes(q) ||
-      c.phone.toLowerCase().includes(q) ||
-      c.email.toLowerCase().includes(q) ||
-      c.address.toLowerCase().includes(q)
-    );
-  });
+  const loadData = useCallback(async (query?: string) => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      const data = await api.customers.list(query);
+      setCustomers(data);
+    } catch (err: any) {
+      console.error("Failed to load customers:", err);
+      setError(err?.message || "Failed to load customers from backend");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [api]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    loadData(search);
+  };
 
   return (
     <AppShell activeItem="customers">
@@ -29,8 +46,7 @@ export default function CustomersPage() {
               Customers Directory
             </h1>
             <p className="text-xs sm:text-sm font-medium text-[#7a7a7a] mt-0.5">
-              Client profiles, vehicle fleets, contact records, and account
-              balances.
+              Live client profiles, vehicle fleets, contact records, and account balances.
             </p>
           </div>
 
@@ -44,7 +60,7 @@ export default function CustomersPage() {
         </div>
 
         {/* Search */}
-        <div className="relative">
+        <form onSubmit={handleSearchSubmit} className="relative">
           <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-[#737373]">
             <svg
               className="h-4 w-4"
@@ -59,95 +75,133 @@ export default function CustomersPage() {
           </div>
           <input
             type="text"
-            placeholder="Search by customer name, phone number, address..."
+            placeholder="Search by customer name, phone number, address... (press Enter)"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full pl-10 pr-4 py-3 rounded-xl bg-[#141414] border border-[#262626] text-sm text-white placeholder:text-[#555] focus:border-[#22c55e] focus:outline-none"
           />
-        </div>
+        </form>
+
+        {error && (
+          <div className="p-4 rounded-xl bg-red-950/40 border border-red-800/50 text-red-300 text-sm flex items-center justify-between">
+            <span>{error}</span>
+            <button
+              onClick={() => loadData(search)}
+              className="text-xs font-bold underline hover:text-white"
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
+        {/* Loading state */}
+        {isLoading && (
+          <div className="py-12 text-center text-[#737373] text-sm animate-pulse">
+            Loading real customers from database...
+          </div>
+        )}
+
+        {/* Empty state */}
+        {!isLoading && customers.length === 0 && (
+          <div className="py-16 text-center rounded-2xl border border-dashed border-[#262626] p-8 space-y-3">
+            <p className="text-base font-bold text-neutral-300">No customers found</p>
+            <p className="text-xs text-[#737373]">
+              {search ? `No customer matched "${search}"` : "Get started by registering your first customer."}
+            </p>
+            <Link
+              href="/customers/new"
+              className="inline-block mt-2 rounded-xl bg-[#22c55e] px-4 py-2 text-xs font-bold text-black hover:bg-[#16a34a]"
+            >
+              Register Customer
+            </Link>
+          </div>
+        )}
 
         {/* Customer Cards Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-          {filteredCustomers.map((cust) => (
-            <div
-              key={cust.id}
-              className="rounded-2xl bg-[#141414] border border-[#242424] p-5 flex flex-col justify-between space-y-4 hover:border-[#383838] transition-colors shadow-sm"
-            >
-              <div>
-                <div className="flex items-start justify-between">
+        {!isLoading && customers.length > 0 && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+            {customers.map((cust) => {
+              const fullName = `${cust.first_name} ${cust.last_name}`.trim();
+              return (
+                <div
+                  key={cust.id}
+                  className="rounded-2xl bg-[#141414] border border-[#242424] p-5 flex flex-col justify-between space-y-4 hover:border-[#383838] transition-colors shadow-sm"
+                >
                   <div>
-                    <Link
-                      href={`/customers/${cust.id}`}
-                      className="text-base font-bold text-white hover:text-[#22c55e] transition-colors"
-                    >
-                      {cust.name}
-                    </Link>
-                    <p className="text-xs text-[#8c8c8c] mt-0.5">
-                      {cust.phone}
-                    </p>
-                    <p className="text-xs text-[#666] truncate mt-0.5">
-                      {cust.email}
-                    </p>
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <Link
+                          href={`/customers/${cust.id}`}
+                          className="text-base font-bold text-white hover:text-[#22c55e] transition-colors"
+                        >
+                          {fullName}
+                        </Link>
+                        <p className="text-xs text-[#8c8c8c] mt-0.5">
+                          {cust.phone}
+                        </p>
+                        {cust.email && (
+                          <p className="text-xs text-[#666] truncate mt-0.5">
+                            {cust.email}
+                          </p>
+                        )}
+                      </div>
+
+                      {cust.is_tax_exempt && (
+                        <span className="text-[10px] font-bold text-[#38bdf8] bg-[#38bdf8]/10 border border-[#38bdf8]/20 px-2 py-0.5 rounded-md">
+                          Tax Exempt
+                        </span>
+                      )}
+                    </div>
+
+                    {cust.address && (
+                      <p className="text-xs text-[#737373] mt-2 line-clamp-1">
+                        {cust.address}
+                      </p>
+                    )}
                   </div>
 
-                  <span className="text-xs font-bold text-[#888] bg-[#1a1a1a] border border-[#262626] px-2.5 py-1 rounded-lg">
-                    {cust.vehiclesCount}{" "}
-                    {cust.vehiclesCount === 1 ? "Vehicle" : "Vehicles"}
-                  </span>
-                </div>
+                  <div className="pt-3 border-t border-[#1f1f1f] flex items-center justify-between">
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-[#666] tracking-wider block">
+                        Terms & Discount
+                      </span>
+                      <span className="font-mono text-xs text-[#a3a3a3]">
+                        {cust.default_discount_percent > 0 ? `${cust.default_discount_percent}% off` : "Standard"}{" "}
+                        {cust.custom_payment_terms_days > 0 ? `• Net ${cust.custom_payment_terms_days}d` : "• COD"}
+                      </span>
+                    </div>
 
-                <p className="text-xs text-[#737373] mt-2 line-clamp-1">
-                  {cust.address}
-                </p>
-              </div>
-
-              <div className="pt-3 border-t border-[#1f1f1f] flex items-center justify-between">
-                <div>
-                  <span className="text-[10px] uppercase font-bold text-[#666] tracking-wider block">
-                    Outstanding Balance
-                  </span>
-                  <span
-                    className={`font-mono text-sm font-bold ${
-                      cust.outstandingBalance > 0
-                        ? "text-[#ef4444]"
-                        : "text-[#22c55e]"
-                    }`}
-                  >
-                    {cust.outstandingBalance > 0
-                      ? formatCurrency(cust.outstandingBalance)
-                      : "Paid in Full"}
-                  </span>
+                    {/* Direct Action Shortcuts: WhatsApp & Call */}
+                    <div className="flex items-center gap-1.5">
+                      <a
+                        href={`https://wa.me/${cust.phone.replace(/\D/g, "")}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#0f2416] border border-[#1d472c] text-[#22c55e] hover:bg-[#163620] transition-colors"
+                        title="WhatsApp Message"
+                      >
+                        💬
+                      </a>
+                      <a
+                        href={`tel:${cust.phone.replace(/\s+/g, "")}`}
+                        className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#1a1a1a] border border-[#2a2a2a] text-white hover:bg-[#252525] transition-colors"
+                        title="Call Customer"
+                      >
+                        📞
+                      </a>
+                      <Link
+                        href={`/customers/${cust.id}`}
+                        className="flex h-9 items-center justify-center px-3 rounded-lg bg-[#1f1f1f] text-xs font-bold text-neutral-200 hover:bg-[#282828] transition-colors"
+                      >
+                        View
+                      </Link>
+                    </div>
+                  </div>
                 </div>
-
-                {/* Direct Action Shortcuts: WhatsApp & Call */}
-                <div className="flex items-center gap-1.5">
-                  <a
-                    href={`https://wa.me/27${cust.phone.replace(/\D/g, "").slice(-9)}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#0f2416] border border-[#1d472c] text-[#22c55e] hover:bg-[#163620] transition-colors"
-                    title="WhatsApp Message"
-                  >
-                    💬
-                  </a>
-                  <a
-                    href={`tel:${cust.phone.replace(/\s+/g, "")}`}
-                    className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#1a1a1a] border border-[#2a2a2a] text-white hover:bg-[#252525] transition-colors"
-                    title="Call Customer"
-                  >
-                    📞
-                  </a>
-                  <Link
-                    href={`/customers/${cust.id}`}
-                    className="flex h-9 items-center justify-center px-3 rounded-lg bg-[#1f1f1f] text-xs font-bold text-neutral-200 hover:bg-[#282828] transition-colors"
-                  >
-                    View
-                  </Link>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </AppShell>
   );
