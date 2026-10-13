@@ -1,19 +1,24 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { AppShell } from "@/components/layout/AppShell";
-import {
-  MOCK_INVOICES,
-  MOCK_REPAIR_ORDERS,
-  MOCK_WORKSHOP,
-  formatCurrency,
-} from "@/lib/mock-data";
-import { Invoice, PaymentStatus } from "@/lib/types";
+import { type ApiInvoice } from "@/lib/api/invoices";
+import { type RepairOrderRead } from "@/lib/api/jobs";
+import { useApi } from "@/lib/api/use-api";
+import { formatCurrency, formatDate } from "@/lib/format";
+
+const WORKSHOP_INFO = {
+  name: "MechanicMate Workshop",
+  vatNumber: "ZA-4902188201",
+  phone: "+27 11 482 9900",
+  email: "billing@mechanicmate.co.za",
+  address: "Unit 4, Industrial Park, Main Reef Road, Johannesburg, 2092",
+};
 
 const STATUS_CONFIG: Record<
-  PaymentStatus,
+  string,
   { label: string; text: string; bg: string; border: string }
 > = {
   draft: {
@@ -51,66 +56,124 @@ const STATUS_CONFIG: Record<
 export default function InvoiceDetailPage() {
   const params = useParams();
   const id = params?.id as string;
+  const api = useApi();
 
-  const foundInvoice =
-    MOCK_INVOICES.find(
-      (inv) =>
-        inv.id === id ||
-        inv.invoiceNumber.toLowerCase() === id?.toLowerCase() ||
-        inv.roId === id,
-    ) || MOCK_INVOICES[0];
-
-  const [invoice, setInvoice] = useState<Invoice>(foundInvoice);
+  const [invoice, setInvoice] = useState<ApiInvoice | null>(null);
+  const [job, setJob] = useState<RepairOrderRead | null>(null);
+  const [loading, setLoading] = useState(true);
   const [showPaymentSuccess, setShowPaymentSuccess] = useState(false);
+  const [processingPayment, setProcessingPayment] = useState(false);
 
-  // Match repair order to pull exact parts and labor line items
-  const matchedRO = MOCK_REPAIR_ORDERS.find(
-    (ro) => ro.id === invoice.roId || ro.roNumber === invoice.roNumber,
-  );
+  useEffect(() => {
+    if (!id) return;
+    setLoading(true);
 
-  // Fallback line items if no exact RO matched
-  const partsItems = matchedRO?.parts ?? [
-    {
-      id: "p-def1",
-      name: "OEM Maintenance Parts Kit",
-      qty: 1,
-      unitPrice: invoice.subtotal * 0.6,
-    },
-  ];
-  const laborItems = matchedRO?.labor ?? [
-    {
-      id: "l-def1",
-      description: "Workshop diagnostic & mechanical service labor",
-      hours: 2.5,
-      rate: 480,
-    },
-  ];
+    api.invoices.get(id)
+      .then(async (inv) => {
+        setInvoice(inv);
+        if (inv.repair_order_id) {
+          try {
+            const jobData = await api.jobs.get(inv.repair_order_id);
+            setJob(jobData);
+          } catch (e) {
+            console.warn("Could not load associated repair order:", e);
+          }
+        }
+      })
+      .catch((err) => {
+        console.error("Failed to load invoice:", err);
+      })
+      .finally(() => setLoading(false));
+  }, [id, api]);
 
-  const partsSubtotal = partsItems.reduce(
-    (acc, p) => acc + p.qty * p.unitPrice,
-    0,
-  );
-  const laborSubtotal = laborItems.reduce(
-    (acc, l) => acc + l.hours * l.rate,
-    0,
-  );
-  const calculatedSubtotal = partsSubtotal + laborSubtotal;
-  const calculatedVat = calculatedSubtotal * (invoice.taxRatePercent / 100);
-  const grandTotal = calculatedSubtotal + calculatedVat;
-  const balanceDue =
-    invoice.paymentStatus === "paid" ? 0 : grandTotal - invoice.amountPaid;
+  const handleMarkAsPaid = async () => {
+    if (!invoice) return;
+    const balance = invoice.total_amount - invoice.paid_amount;
+    if (balance <= 0) return;
 
-  const handleMarkAsPaid = () => {
-    setInvoice((prev) => ({
-      ...prev,
-      paymentStatus: "paid",
-      amountPaid: grandTotal,
-    }));
-    setShowPaymentSuccess(true);
-    setTimeout(() => setShowPaymentSuccess(false), 4000);
+    try {
+      setProcessingPayment(true);
+      await api.invoices.recordPayment(invoice.id, {
+        amount: balance,
+        payment_method: "card",
+        transaction_reference: `POS-${Date.now().toString().slice(-6)}`,
+      });
+
+      setInvoice({
+        ...invoice,
+        paid_amount: invoice.total_amount,
+        status: "paid",
+      });
+      setShowPaymentSuccess(true);
+      setTimeout(() => setShowPaymentSuccess(false), 4000);
+    } catch (err) {
+      console.error("Failed to record payment:", err);
+      alert("Failed to record payment. Please try again.");
+    } finally {
+      setProcessingPayment(false);
+    }
   };
 
-  const statusCfg = STATUS_CONFIG[invoice.paymentStatus];
+  if (loading) {
+    return (
+      <AppShell activeItem="invoices">
+        <div className="mx-auto max-w-4xl px-4 py-16 flex flex-col items-center justify-center space-y-4">
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#22c55e] border-t-transparent" />
+          <p className="text-xs text-[#8c8c8c]">Loading tax invoice...</p>
+        </div>
+      </AppShell>
+    );
+  }
+
+  if (!invoice) {
+    return (
+      <AppShell activeItem="invoices">
+        <div className="mx-auto max-w-4xl px-4 py-16 text-center space-y-4">
+          <p className="text-sm text-red-400">Tax invoice not found</p>
+          <Link
+            href="/invoices"
+            className="inline-block rounded-xl bg-[#22c55e] px-4 py-2 text-xs font-bold text-black hover:bg-[#16a34a]"
+          >
+            Return to Invoices
+          </Link>
+        </div>
+      </AppShell>
+    );
+  }
+
+  const partsItems = job?.items?.filter((i) => i.item_type === "part") || [];
+  const laborItems =
+    job?.items?.filter(
+      (i) => i.item_type === "labour" || i.item_type === "labor"
+    ) || [];
+
+  const partsSubtotal = partsItems.reduce((acc, p) => acc + p.total_price, 0);
+  const laborSubtotal = laborItems.reduce((acc, l) => acc + l.total_price, 0);
+  const calculatedSubtotal =
+    partsSubtotal + laborSubtotal > 0
+      ? partsSubtotal + laborSubtotal
+      : invoice.subtotal;
+  const calculatedVat =
+    partsSubtotal + laborSubtotal > 0
+      ? calculatedSubtotal * (invoice.tax_rate_percent / 100)
+      : invoice.tax_amount;
+  const grandTotal =
+    partsSubtotal + laborSubtotal > 0
+      ? calculatedSubtotal + calculatedVat
+      : invoice.total_amount;
+  const balanceDue =
+    invoice.status === "paid" ? 0 : grandTotal - invoice.paid_amount;
+
+  const statusCfg =
+    STATUS_CONFIG[invoice.status] || STATUS_CONFIG["sent"];
+
+  const customerName = job?.customer?.name || "Cash Customer";
+  const customerPhone = job?.customer?.phone || "+27 11 000 0000";
+  const customerEmail = job?.customer?.email || "customer@example.co.za";
+  const vehicleName = job?.vehicle
+    ? `${job.vehicle.year} ${job.vehicle.make} ${job.vehicle.model}`
+    : "Vehicle Service";
+  const licensePlate = job?.vehicle?.license_plate || "ZA-PLATE";
 
   return (
     <AppShell activeItem="invoices">
@@ -126,7 +189,7 @@ export default function InvoiceDetailPage() {
             </Link>
             <div className="flex items-center gap-3">
               <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white">
-                {invoice.invoiceNumber}
+                {invoice.invoice_number}
               </h1>
               <span
                 className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold border ${statusCfg.bg} ${statusCfg.text} ${statusCfg.border}`}
@@ -141,20 +204,21 @@ export default function InvoiceDetailPage() {
 
           {/* Actions */}
           <div className="flex flex-wrap items-center gap-2.5">
-            {invoice.paymentStatus !== "paid" && (
+            {invoice.status !== "paid" && (
               <button
                 onClick={handleMarkAsPaid}
-                className="min-h-[42px] inline-flex items-center gap-2 rounded-xl bg-[#1a1a1a] border border-[#2e2e2e] px-4 py-2 text-xs font-bold text-[#22c55e] hover:bg-[#22c55e]/10 hover:border-[#22c55e]/30 transition-all select-none touch-manipulation"
+                disabled={processingPayment}
+                className="min-h-[42px] inline-flex items-center gap-2 rounded-xl bg-[#1a1a1a] border border-[#2e2e2e] px-4 py-2 text-xs font-bold text-[#22c55e] hover:bg-[#22c55e]/10 hover:border-[#22c55e]/30 transition-all select-none touch-manipulation disabled:opacity-50"
               >
-                <span>💳 Mark as Paid</span>
+                <span>{processingPayment ? "Recording..." : "💳 Mark as Paid"}</span>
               </button>
             )}
 
             <a
-              href={`https://wa.me/${invoice.customerPhone.replace(/\s+/g, "")}?text=Hi%20${encodeURIComponent(
-                invoice.customerName,
-              )},%20here%20is%20your%20tax%20invoice%20${invoice.invoiceNumber}%20from%20${encodeURIComponent(
-                MOCK_WORKSHOP.name,
+              href={`https://wa.me/${customerPhone.replace(/[\s+]/g, "")}?text=Hi%20${encodeURIComponent(
+                customerName
+              )},%20here%20is%20your%20tax%20invoice%20${invoice.invoice_number}%20from%20${encodeURIComponent(
+                WORKSHOP_INFO.name
               )}%20for%20total%20${formatCurrency(grandTotal)}`}
               target="_blank"
               rel="noopener noreferrer"
@@ -179,8 +243,7 @@ export default function InvoiceDetailPage() {
             <div>
               <p className="font-bold">Payment Successfully Recorded!</p>
               <p className="text-xs text-[#86efac]">
-                Invoice marked as Paid in Full. Receipt notification sent to
-                customer.
+                Invoice marked as Paid in Full. Payment ledger updated in database.
               </p>
             </div>
           </div>
@@ -196,17 +259,17 @@ export default function InvoiceDetailPage() {
                   MM
                 </div>
                 <span className="text-xl sm:text-2xl font-black text-white tracking-tight print:text-black">
-                  {MOCK_WORKSHOP.name}
+                  {WORKSHOP_INFO.name}
                 </span>
               </div>
               <p className="text-xs text-[#8a8a8a] print:text-neutral-700 max-w-sm leading-relaxed">
-                {MOCK_WORKSHOP.address}
+                {WORKSHOP_INFO.address}
               </p>
               <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-[#8a8a8a] print:text-neutral-700 pt-1 font-mono">
-                <span>Tel: {MOCK_WORKSHOP.phone}</span>
-                <span>Email: {MOCK_WORKSHOP.email}</span>
+                <span>Tel: {WORKSHOP_INFO.phone}</span>
+                <span>Email: {WORKSHOP_INFO.email}</span>
                 <span className="font-bold text-neutral-300 print:text-black">
-                  VAT Reg: {MOCK_WORKSHOP.vatNumber}
+                  VAT Reg: {WORKSHOP_INFO.vatNumber}
                 </span>
               </div>
             </div>
@@ -217,29 +280,29 @@ export default function InvoiceDetailPage() {
                 TAX INVOICE
               </h2>
               <p className="font-mono text-sm font-black text-white print:text-black">
-                {invoice.invoiceNumber}
+                {invoice.invoice_number}
               </p>
               <div className="space-y-0.5 text-xs text-[#8a8a8a] print:text-neutral-700 font-medium">
                 <p>
                   Date Issued:{" "}
                   <span className="text-white print:text-black font-semibold">
-                    {invoice.issueDate}
+                    {formatDate(invoice.created_at)}
                   </span>
                 </p>
                 <p>
                   Payment Due:{" "}
                   <span className="text-white print:text-black font-semibold">
-                    {invoice.dueDate}
+                    {formatDate(invoice.due_date)}
                   </span>
                 </p>
-                {invoice.roNumber && (
+                {job?.ro_number && (
                   <p>
                     Repair Order:{" "}
                     <Link
-                      href={`/jobs/${invoice.roId}`}
+                      href={`/jobs/${job.id}`}
                       className="text-[#22c55e] hover:underline font-bold print:text-black"
                     >
-                      {invoice.roNumber}
+                      {job.ro_number}
                     </Link>
                   </p>
                 )}
@@ -255,12 +318,11 @@ export default function InvoiceDetailPage() {
                 Billed To (Customer)
               </span>
               <p className="text-base font-bold text-white print:text-black">
-                {invoice.customerName}
+                {customerName}
               </p>
               <div className="space-y-1 text-xs text-[#8a8a8a] print:text-neutral-700">
-                <p>{invoice.customerAddress}</p>
-                <p className="font-mono">{invoice.customerPhone}</p>
-                <p>{invoice.customerEmail}</p>
+                <p className="font-mono">{customerPhone}</p>
+                <p>{customerEmail}</p>
               </div>
             </div>
 
@@ -271,124 +333,128 @@ export default function InvoiceDetailPage() {
               </span>
               <div className="flex items-center gap-2">
                 <p className="text-base font-bold text-white print:text-black">
-                  {invoice.vehicleName}
+                  {vehicleName}
                 </p>
                 <span className="font-mono text-xs font-bold text-[#ededed] print:text-black bg-[#242424] print:bg-neutral-200 border border-[#383838] print:border-black px-2.5 py-0.5 rounded-md uppercase">
-                  {invoice.licensePlate}
+                  {licensePlate}
                 </span>
               </div>
               <div className="space-y-1 text-xs text-[#8a8a8a] print:text-neutral-700 font-mono">
-                {matchedRO?.vin && <p>VIN: {matchedRO.vin}</p>}
-                <p>Workshop Bay: Bay 1 (Alex Ndlovu - Lead Tech)</p>
+                {job?.vehicle?.vin && <p>VIN: {job.vehicle.vin}</p>}
+                <p>Status: {job?.status || "Complete"}</p>
               </div>
             </div>
           </div>
 
           {/* Itemized Parts Table */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="text-xs font-black uppercase tracking-wider text-[#a3a3a3] print:text-black">
-                1. Parts & Materials
-              </h3>
-              <span className="font-mono text-xs font-bold text-white print:text-black">
-                {formatCurrency(partsSubtotal)}
-              </span>
-            </div>
+          {partsItems.length > 0 && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-black uppercase tracking-wider text-[#a3a3a3] print:text-black">
+                  1. Parts & Materials
+                </h3>
+                <span className="font-mono text-xs font-bold text-white print:text-black">
+                  {formatCurrency(partsSubtotal)}
+                </span>
+              </div>
 
-            <div className="overflow-x-auto rounded-xl border border-[#242424] print:border-black">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-[#1a1a1a] print:bg-neutral-100 text-[#737373] print:text-black uppercase text-[10px] tracking-wider border-b border-[#242424] print:border-black">
-                  <tr>
-                    <th className="px-4 py-2.5 font-bold">Item Description</th>
-                    <th className="px-3 py-2.5 font-bold text-center w-16">
-                      Qty
-                    </th>
-                    <th className="px-4 py-2.5 font-bold text-right w-28">
-                      Unit Price
-                    </th>
-                    <th className="px-4 py-2.5 font-bold text-right w-28">
-                      Amount
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#212121] print:divide-black font-medium">
-                  {partsItems.map((part) => (
-                    <tr
-                      key={part.id}
-                      className="hover:bg-[#1a1a1a]/50 print:hover:bg-transparent"
-                    >
-                      <td className="px-4 py-3 text-white print:text-black font-medium">
-                        {part.name}
-                      </td>
-                      <td className="px-3 py-3 text-center text-[#8e8e8e] print:text-black font-mono">
-                        {part.qty}
-                      </td>
-                      <td className="px-4 py-3 text-right text-[#8e8e8e] print:text-black font-mono">
-                        {formatCurrency(part.unitPrice)}
-                      </td>
-                      <td className="px-4 py-3 text-right text-white print:text-black font-mono font-semibold">
-                        {formatCurrency(part.qty * part.unitPrice)}
-                      </td>
+              <div className="overflow-x-auto rounded-xl border border-[#242424] print:border-black">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-[#1a1a1a] print:bg-neutral-100 text-[#737373] print:text-black uppercase text-[10px] tracking-wider border-b border-[#242424] print:border-black">
+                    <tr>
+                      <th className="px-4 py-2.5 font-bold">Item Description</th>
+                      <th className="px-3 py-2.5 font-bold text-center w-16">
+                        Qty
+                      </th>
+                      <th className="px-4 py-2.5 font-bold text-right w-28">
+                        Unit Price
+                      </th>
+                      <th className="px-4 py-2.5 font-bold text-right w-28">
+                        Amount
+                      </th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-[#212121] print:divide-black font-medium">
+                    {partsItems.map((part) => (
+                      <tr
+                        key={part.id}
+                        className="hover:bg-[#1a1a1a]/50 print:hover:bg-transparent"
+                      >
+                        <td className="px-4 py-3 text-white print:text-black font-medium">
+                          {part.description}
+                        </td>
+                        <td className="px-3 py-3 text-center text-[#8e8e8e] print:text-black font-mono">
+                          {part.quantity}
+                        </td>
+                        <td className="px-4 py-3 text-right text-[#8e8e8e] print:text-black font-mono">
+                          {formatCurrency(part.unit_price)}
+                        </td>
+                        <td className="px-4 py-3 text-right text-white print:text-black font-mono font-semibold">
+                          {formatCurrency(part.total_price)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Itemized Labor Table */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="text-xs font-black uppercase tracking-wider text-[#a3a3a3] print:text-black">
-                2. Mechanical Labor & Diagnostics
-              </h3>
-              <span className="font-mono text-xs font-bold text-white print:text-black">
-                {formatCurrency(laborSubtotal)}
-              </span>
-            </div>
+          {laborItems.length > 0 && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-black uppercase tracking-wider text-[#a3a3a3] print:text-black">
+                  2. Mechanical Labor & Diagnostics
+                </h3>
+                <span className="font-mono text-xs font-bold text-white print:text-black">
+                  {formatCurrency(laborSubtotal)}
+                </span>
+              </div>
 
-            <div className="overflow-x-auto rounded-xl border border-[#242424] print:border-black">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-[#1a1a1a] print:bg-neutral-100 text-[#737373] print:text-black uppercase text-[10px] tracking-wider border-b border-[#242424] print:border-black">
-                  <tr>
-                    <th className="px-4 py-2.5 font-bold">
-                      Labor Operation Description
-                    </th>
-                    <th className="px-3 py-2.5 font-bold text-center w-16">
-                      Hours
-                    </th>
-                    <th className="px-4 py-2.5 font-bold text-right w-28">
-                      Rate/Hr
-                    </th>
-                    <th className="px-4 py-2.5 font-bold text-right w-28">
-                      Amount
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#212121] print:divide-black font-medium">
-                  {laborItems.map((lab) => (
-                    <tr
-                      key={lab.id}
-                      className="hover:bg-[#1a1a1a]/50 print:hover:bg-transparent"
-                    >
-                      <td className="px-4 py-3 text-white print:text-black font-medium">
-                        {lab.description}
-                      </td>
-                      <td className="px-3 py-3 text-center text-[#8e8e8e] print:text-black font-mono">
-                        {lab.hours.toFixed(1)}
-                      </td>
-                      <td className="px-4 py-3 text-right text-[#8e8e8e] print:text-black font-mono">
-                        {formatCurrency(lab.rate)}
-                      </td>
-                      <td className="px-4 py-3 text-right text-white print:text-black font-mono font-semibold">
-                        {formatCurrency(lab.hours * lab.rate)}
-                      </td>
+              <div className="overflow-x-auto rounded-xl border border-[#242424] print:border-black">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-[#1a1a1a] print:bg-neutral-100 text-[#737373] print:text-black uppercase text-[10px] tracking-wider border-b border-[#242424] print:border-black">
+                    <tr>
+                      <th className="px-4 py-2.5 font-bold">
+                        Labor Operation Description
+                      </th>
+                      <th className="px-3 py-2.5 font-bold text-center w-16">
+                        Hours
+                      </th>
+                      <th className="px-4 py-2.5 font-bold text-right w-28">
+                        Rate/Hr
+                      </th>
+                      <th className="px-4 py-2.5 font-bold text-right w-28">
+                        Amount
+                      </th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-[#212121] print:divide-black font-medium">
+                    {laborItems.map((lab) => (
+                      <tr
+                        key={lab.id}
+                        className="hover:bg-[#1a1a1a]/50 print:hover:bg-transparent"
+                      >
+                        <td className="px-4 py-3 text-white print:text-black font-medium">
+                          {lab.description}
+                        </td>
+                        <td className="px-3 py-3 text-center text-[#8e8e8e] print:text-black font-mono">
+                          {(lab.labour_hours || lab.quantity).toFixed(1)}
+                        </td>
+                        <td className="px-4 py-3 text-right text-[#8e8e8e] print:text-black font-mono">
+                          {formatCurrency(lab.labour_hourly_rate || lab.unit_price)}
+                        </td>
+                        <td className="px-4 py-3 text-right text-white print:text-black font-mono font-semibold">
+                          {formatCurrency(lab.total_price)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Financial Calculation Summary & Payment Remittance */}
           <div className="grid grid-cols-1 sm:grid-cols-12 gap-6 pt-4 border-t border-[#242424] print:border-black">
@@ -411,7 +477,7 @@ export default function InvoiceDetailPage() {
                     Account Name:
                   </p>
                   <p className="font-semibold text-white print:text-black">
-                    Dev&apos;s Auto Workshop (Pty) Ltd
+                    MechanicMate Workshop (Pty) Ltd
                   </p>
                 </div>
                 <div>
@@ -435,7 +501,7 @@ export default function InvoiceDetailPage() {
                     Payment Reference:
                   </p>
                   <p className="font-mono font-black text-[#22c55e] print:text-black text-sm">
-                    {invoice.invoiceNumber}
+                    {invoice.invoice_number}
                   </p>
                 </div>
               </div>
@@ -454,7 +520,7 @@ export default function InvoiceDetailPage() {
                 </span>
               </div>
               <div className="flex justify-between text-xs text-[#8e8e8e] print:text-neutral-700">
-                <span>VAT ({invoice.taxRatePercent}%):</span>
+                <span>VAT ({invoice.tax_rate_percent}%):</span>
                 <span className="font-mono text-white print:text-black">
                   {formatCurrency(calculatedVat)}
                 </span>
@@ -466,11 +532,11 @@ export default function InvoiceDetailPage() {
                 </span>
               </div>
 
-              {invoice.amountPaid > 0 && (
+              {invoice.paid_amount > 0 && (
                 <div className="flex justify-between text-xs text-[#38bdf8] print:text-neutral-700">
                   <span>Less Amount Paid:</span>
                   <span className="font-mono">
-                    -{formatCurrency(invoice.amountPaid)}
+                    -{formatCurrency(invoice.paid_amount)}
                   </span>
                 </div>
               )}
@@ -497,7 +563,7 @@ export default function InvoiceDetailPage() {
                 Workshop Authorized Representative:
               </p>
               <div className="h-10 border-b border-[#333333] print:border-black mt-4 flex items-end pb-1 font-mono text-neutral-400 print:text-black">
-                Alex Ndlovu (Lead Master Technician)
+                Lead Master Technician
               </div>
               <p className="text-[10px] text-[#555] print:text-neutral-500 mt-1">
                 Authorized Signature & Date
@@ -508,7 +574,7 @@ export default function InvoiceDetailPage() {
                 Customer Acceptance / Received By:
               </p>
               <div className="h-10 border-b border-[#333333] print:border-black mt-4 flex items-end pb-1 font-mono text-neutral-400 print:text-black">
-                {invoice.customerName}
+                {customerName}
               </div>
               <p className="text-[10px] text-[#555] print:text-neutral-500 mt-1">
                 Signature upon vehicle handover

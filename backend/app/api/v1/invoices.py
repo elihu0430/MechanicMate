@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, func
+from sqlalchemy import select, and_, or_, func
 from sqlalchemy.orm import selectinload
 from typing import List
 import uuid
@@ -111,3 +111,64 @@ async def record_payment(
     await db.flush()
     await db.refresh(payment)
     return payment
+
+@router.get("/portal/{token}", response_model=InvoiceRead)
+async def get_portal_invoice(
+    token: str,
+    db: AsyncSession = DatabaseDep,
+):
+    or_clauses = [
+        func.lower(Invoice.invoice_number) == token.lower(),
+    ]
+    try:
+        parsed_uuid = uuid.UUID(token)
+        or_clauses.append(Invoice.id == parsed_uuid)
+        or_clauses.append(Invoice.repair_order_id == parsed_uuid)
+    except ValueError:
+        pass
+
+    query = (
+        select(Invoice)
+        .options(selectinload(Invoice.payments))
+        .where(or_(*or_clauses))
+    )
+    res = await db.execute(query)
+    inv = res.scalars().first()
+    if not inv:
+        raise HTTPException(status_code=404, detail="Tax invoice not found")
+    return inv
+
+@router.get("/{invoice_id}", response_model=InvoiceRead)
+async def get_invoice(
+    invoice_id: str,
+    db: AsyncSession = DatabaseDep,
+    current_user: AuthenticatedUser = CurrentUserDep,
+):
+    workshop_uuid = uuid.UUID(current_user.workshop_id)
+    or_clauses = [
+        func.lower(Invoice.invoice_number) == invoice_id.lower(),
+    ]
+    try:
+        parsed_uuid = uuid.UUID(invoice_id)
+        or_clauses.append(Invoice.id == parsed_uuid)
+        or_clauses.append(Invoice.repair_order_id == parsed_uuid)
+    except ValueError:
+        pass
+
+    query = (
+        select(Invoice)
+        .options(selectinload(Invoice.payments))
+        .where(
+            and_(
+                Invoice.workshop_id == workshop_uuid,
+                or_(*or_clauses)
+            )
+        )
+    )
+    res = await db.execute(query)
+    inv = res.scalars().first()
+    if not inv:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    return inv
+
+

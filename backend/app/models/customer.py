@@ -33,3 +33,8 @@ class Customer(Base):
     workshop = relationship("Workshop", back_populates="customers")
     vehicles = relationship("Vehicle", back_populates="customer", cascade="all, delete-orphan")
     repair_orders = relationship("RepairOrder", back_populates="customer")
+
+    @property
+    def name(self) -> str:
+        return f"{self.first_name} {self.last_name}".strip()
+

@@ -3,11 +3,15 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useSignUp } from "@clerk/nextjs/legacy";
 
 export default function VerifyEmailPage() {
   const router = useRouter();
+  const { isLoaded, signUp, setActive } = useSignUp();
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
   const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [resendCooldown, setResendCooldown] = useState(45);
 
   const handleOtpChange = (val: string, index: number) => {
     if (val.length > 1) val = val.slice(-1);
@@ -22,13 +26,91 @@ export default function VerifyEmailPage() {
     }
   };
 
-  const handleVerify = (e: React.FormEvent) => {
+  const handleVerify = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isLoaded || !signUp || loading) {
+      if (!signUp) {
+        router.push("/sign-up");
+      }
+      return;
+    }
+    const fullCode = otp.join("").trim();
+    if (fullCode.length < 6) {
+      setErrorMsg("Please enter the complete 6-digit verification code.");
+      return;
+    }
+
     setLoading(true);
-    setTimeout(() => {
+    setErrorMsg(null);
+
+    try {
+      const completeSignUp = await signUp.attemptEmailAddressVerification({
+        code: fullCode,
+      });
+
+      if (
+        completeSignUp.status === "complete" ||
+        completeSignUp.createdSessionId
+      ) {
+        if (completeSignUp.createdSessionId) {
+          await setActive?.({ session: completeSignUp.createdSessionId });
+        }
+        window.location.href = "/";
+        return;
+      } else {
+        setErrorMsg(
+          `Verification status: ${completeSignUp.status}. If your account is ready, please sign in.`,
+        );
+      }
+    } catch (err: unknown) {
+      console.error("Clerk verification error:", err);
+      const clerkError = err as {
+        errors?: Array<{
+          message?: string;
+          longMessage?: string;
+          code?: string;
+        }>;
+      };
+      const firstErr = clerkError.errors?.[0];
+      const isAlreadyVerified =
+        firstErr?.code === "verification_already_verified" ||
+        firstErr?.message?.toLowerCase().includes("already been verified") ||
+        firstErr?.longMessage?.toLowerCase().includes("already been verified");
+
+      if (isAlreadyVerified) {
+        if (signUp.createdSessionId) {
+          await setActive?.({ session: signUp.createdSessionId });
+          window.location.href = "/";
+          return;
+        } else {
+          setErrorMsg("Email already verified! Redirecting to sign in...");
+          setTimeout(() => {
+            window.location.href = "/sign-in";
+          }, 1000);
+          return;
+        }
+      }
+
+      setErrorMsg(
+        firstErr?.longMessage ||
+          firstErr?.message ||
+          "Invalid verification code. Please check your email.",
+      );
+    } finally {
       setLoading(false);
-      router.push("/");
-    }, 600);
+    }
+  };
+
+  const handleResendCode = async () => {
+    if (!isLoaded || !signUp) return;
+    try {
+      await signUp.prepareEmailAddressVerification({ strategy: "email_code" });
+      setResendCooldown(45);
+      setErrorMsg(null);
+    } catch (err: unknown) {
+      const clerkError = err as { errors?: Array<{ message?: string }> };
+      setErrorMsg(clerkError.errors?.[0]?.message || "Failed to resend code.");
+    }
   };
 
   return (
@@ -39,9 +121,20 @@ export default function VerifyEmailPage() {
           Verify Workshop Email
         </h2>
         <p className="text-xs text-[#8a8a8a]">
-          We sent a 6-digit one-time code to your registered technician email.
+          {signUp?.emailAddress ? (
+            <>We sent a 6-digit one-time code to <span className="text-white font-mono">{signUp.emailAddress}</span>.</>
+          ) : (
+            "We sent a 6-digit one-time code to your registered technician email."
+          )}
         </p>
       </div>
+
+      {errorMsg && (
+        <div className="rounded-xl bg-[#ef4444]/10 border border-[#ef4444]/30 p-3 flex items-start gap-2.5 text-xs text-[#ef4444]">
+          <span className="text-sm shrink-0">⚠️</span>
+          <p className="flex-1">{errorMsg}</p>
+        </div>
+      )}
 
       <form onSubmit={handleVerify} className="space-y-6">
         <div className="flex justify-center gap-2 sm:gap-3">
@@ -75,10 +168,11 @@ export default function VerifyEmailPage() {
       <div className="flex items-center justify-between text-xs text-[#737373] pt-2 border-t border-[#212121]">
         <button
           type="button"
-          onClick={() => alert("Verification code resent!")}
-          className="text-[#22c55e] hover:underline"
+          onClick={handleResendCode}
+          disabled={resendCooldown > 0}
+          className="text-[#22c55e] hover:underline disabled:text-[#555]"
         >
-          Resend code (0:45)
+          Resend code {resendCooldown > 0 && `(${resendCooldown}s)`}
         </button>
         <Link href="/sign-in" className="hover:text-white">
           Back to Sign In
