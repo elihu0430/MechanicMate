@@ -29,24 +29,32 @@ from app.core.websockets import ws_manager
 async def lifespan(app: FastAPI):
     # Startup actions
     print(f"[STARTUP] {settings.PROJECT_NAME} starting up in {settings.ENVIRONMENT} mode...")
-    if settings.ENVIRONMENT == "development":
-        try:
-            from app.core.database import AsyncSessionLocal
-            from sqlalchemy import text
-            async with AsyncSessionLocal() as db:
-                await db.execute(text("""
-                    INSERT INTO workshops (id, name, phone, email, address, labour_rate_hourly, tax_rate_percent, currency)
-                    VALUES ('00000000-0000-0000-0000-000000000001', 'MechanicMate Dev Workshop', '+27 11 555 0199', 'dev@mechanicmate.co.za', '123 Workshop Road', 480.00, 15.00, 'ZAR')
-                    ON CONFLICT (id) DO NOTHING;
-                """))
-                await db.execute(text("""
-                    INSERT INTO users (id, workshop_id, name, email, role)
-                    VALUES ('user_dev_001', '00000000-0000-0000-0000-000000000001', 'Development Mechanic', 'mechanic@workshop.co.za', 'owner')
-                    ON CONFLICT (id) DO NOTHING;
-                """))
-                await db.commit()
-        except Exception as e:
-            print(f"[STARTUP WARNING] Failed to seed dev workshop: {e}")
+    try:
+        from app.models import Base
+        from app.core.database import engine, AsyncSessionLocal
+        from sqlalchemy import text
+
+        # 1. Ensure all 15 tables are initialized in Neon PostgreSQL
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        print("[STARTUP] Database schema verified/initialized successfully.")
+
+        # 2. Ensure default root workshop and dev user exist (essential for multi-tenant foreign keys)
+        async with AsyncSessionLocal() as db:
+            await db.execute(text("""
+                INSERT INTO workshops (id, name, phone, email, address, labour_rate_hourly, tax_rate_percent, currency)
+                VALUES ('00000000-0000-0000-0000-000000000001', 'MechanicMate Dev Workshop', '+27 11 555 0199', 'dev@mechanicmate.co.za', '123 Workshop Road', 480.00, 15.00, 'ZAR')
+                ON CONFLICT (id) DO NOTHING;
+            """))
+            await db.execute(text("""
+                INSERT INTO users (id, workshop_id, name, email, role)
+                VALUES ('user_dev_001', '00000000-0000-0000-0000-000000000001', 'Development Mechanic', 'mechanic@workshop.co.za', 'owner')
+                ON CONFLICT (id) DO NOTHING;
+            """))
+            await db.commit()
+            print("[STARTUP] Default root workshop verified/seeded.")
+    except Exception as e:
+        print(f"[STARTUP WARNING] Database initialization/seeding note: {e}")
     yield
     # Shutdown actions
     print(f"[SHUTDOWN] {settings.PROJECT_NAME} shutting down...")

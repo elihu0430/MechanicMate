@@ -24,7 +24,9 @@ export function useApi() {
       try {
         if (authContext?.getToken) {
           const raw = await authContext.getToken();
-          if (raw) token = raw;
+          if (raw && typeof raw === "string" && raw.trim().length > 0) {
+            token = raw.trim();
+          }
         }
       } catch {
         // Fallback to dev mode (FastAPI auto-injects dev workshop if no Bearer token in dev mode)

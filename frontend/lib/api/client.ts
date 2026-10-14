@@ -27,8 +27,8 @@ export async function apiClient<T>(endpoint: string, options: RequestOptions = {
     ...((customHeaders as Record<string, string>) || {}),
   };
 
-  if (token) {
-    headers["Authorization"] = `Bearer ${token}`;
+  if (token && typeof token === "string" && token.trim().length > 0 && token !== "undefined" && token !== "null") {
+    headers["Authorization"] = `Bearer ${token.trim()}`;
   }
 
   const url = `${API_BASE_URL}${endpoint.startsWith("/") ? endpoint : `/${endpoint}`}`;

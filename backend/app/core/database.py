@@ -11,11 +11,26 @@ elif _raw_url.startswith("postgresql://") and not _raw_url.startswith("postgresq
 else:
     _db_url = _raw_url
 
-# asyncpg does not accept ?sslmode= in the connection string; it uses connect_args['ssl']
-if "?" in _db_url:
-    _base, _query = _db_url.split("?", 1)
-    _params = [p for p in _query.split("&") if not p.lower().startswith("sslmode=")]
-    _db_url = _base + ("?" + "&".join(_params) if _params else "")
+from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
+
+# asyncpg does not accept libpq query parameters like ?sslmode=, ?channel_binding=, ?target_session_attrs=
+# which causes "TypeError: connect() got an unexpected keyword argument 'channel_binding'".
+# Strip all libpq-specific parameters before initializing asyncpg dialect.
+parsed = urlsplit(_db_url)
+DISALLOWED_ASYNCPG_QUERY_PARAMS = {
+    "sslmode",
+    "channel_binding",
+    "target_session_attrs",
+    "gssencmode",
+    "endpoint",
+    "options",
+}
+query_params = parse_qsl(parsed.query)
+filtered_params = [
+    (k, v) for k, v in query_params if k.lower() not in DISALLOWED_ASYNCPG_QUERY_PARAMS
+]
+new_query = urlencode(filtered_params)
+_db_url = urlunsplit((parsed.scheme, parsed.netloc, parsed.path, new_query, parsed.fragment))
 
 connect_args = {}
 if "neon.tech" in _raw_url or "ssl" in _raw_url.lower():
