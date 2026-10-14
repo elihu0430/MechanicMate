@@ -17,7 +17,11 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "MechanicMate API"
     API_V1_STR: str = "/api/v1"
     
-    CORS_ORIGINS: Union[List[str], str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
+    CORS_ORIGINS: Union[List[str], str] = [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "https://mechanicmate.vercel.app"
+    ]
 
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
@@ -28,12 +32,12 @@ class Settings(BaseSettings):
                 return ["*"]
             if v.startswith("[") and v.endswith("]"):
                 try:
-                    return [str(item).strip() for item in ast.literal_eval(v)]
+                    return [str(item).strip().rstrip("/") for item in ast.literal_eval(v)]
                 except Exception:
                     pass
-            return [origin.strip() for origin in v.split(",") if origin.strip()]
+            return [origin.strip().rstrip("/") for origin in v.split(",") if origin.strip()]
         elif isinstance(v, list):
-            return [str(item).strip() for item in v]
+            return [str(item).strip().rstrip("/") for item in v]
         return ["*"]
 
 

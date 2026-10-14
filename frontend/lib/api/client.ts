@@ -1,4 +1,12 @@
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+function getBaseUrl(): string {
+  let url = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000").trim();
+  if (!url.startsWith("http://") && !url.startsWith("https://")) {
+    url = `https://${url}`;
+  }
+  return url.replace(/\/+$/, "");
+}
+
+const API_BASE_URL = getBaseUrl();
 
 export class ApiError extends Error {
   constructor(public status: number, message: string, public data?: any) {

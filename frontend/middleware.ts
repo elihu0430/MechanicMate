@@ -2,9 +2,14 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 
-const clerkKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
+const clerkKey =
+  process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ||
+  "pk_test_cHJlY2lzZS13YWxydXMtMjE5MC5jbGVyay5hY2NvdW50cy5kZXYk";
 const isClerkConfigured = Boolean(
-  clerkKey && !clerkKey.includes("YOUR_") && clerkKey.startsWith("pk_")
+  clerkKey &&
+  !clerkKey.includes("YOUR_") &&
+  clerkKey.startsWith("pk_") &&
+  process.env.CLERK_SECRET_KEY
 );
 
 // Define public routes that do not require authentication

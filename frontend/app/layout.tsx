@@ -24,7 +24,9 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const clerkKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
+  const clerkKey =
+    process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ||
+    "pk_test_cHJlY2lzZS13YWxydXMtMjE5MC5jbGVyay5hY2NvdW50cy5kZXYk";
   const isClerkConfigured = !!(clerkKey && clerkKey.trim().startsWith("pk_"));
 
   const bodyContent = (

@@ -1,4 +1,27 @@
-const WS_BASE_URL = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8000";
+function getWsBaseUrl(): string {
+  let url = (process.env.NEXT_PUBLIC_WS_URL || "").trim();
+  if (!url) {
+    const apiUrl = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000").trim();
+    if (apiUrl.startsWith("https://")) {
+      url = apiUrl.replace(/^https:\/\//i, "wss://");
+    } else if (apiUrl.startsWith("http://")) {
+      url = apiUrl.replace(/^http:\/\//i, "ws://");
+    } else {
+      url = `wss://${apiUrl}`;
+    }
+  } else {
+    if (url.startsWith("https://")) {
+      url = url.replace(/^https:\/\//i, "wss://");
+    } else if (url.startsWith("http://")) {
+      url = url.replace(/^http:\/\//i, "ws://");
+    } else if (!url.startsWith("ws://") && !url.startsWith("wss://")) {
+      url = `wss://${url}`;
+    }
+  }
+  return url.replace(/\/+$/, "");
+}
+
+const WS_BASE_URL = getWsBaseUrl();
 
 export function createWorkshopWebSocket(
   workshopId: string,
