@@ -78,7 +78,8 @@ export default function InvoicesPage() {
 
   useEffect(() => {
     loadInvoices();
-  }, [api]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const filteredInvoices = invoices.filter(
     (inv) => filter === "all" || inv.status === filter,

@@ -27,7 +27,8 @@ export default function InspectionsPage() {
 
   useEffect(() => {
     loadData();
-  }, [loadData]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <AppShell activeItem="inspections">

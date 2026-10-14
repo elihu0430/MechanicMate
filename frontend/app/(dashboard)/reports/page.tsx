@@ -34,7 +34,8 @@ export default function ReportsPage() {
     return () => {
       isMounted = false;
     };
-  }, [api]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const totalInvoiced = invoices.reduce((sum, inv) => sum + (inv.total_amount || 0), 0);
   const totalCollected = invoices.reduce((sum, inv) => sum + (inv.paid_amount || 0), 0);

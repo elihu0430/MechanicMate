@@ -66,7 +66,8 @@ export default function InspectionDetailPage() {
 
   useEffect(() => {
     loadInspectionData();
-  }, [loadInspectionData]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
 
   const setItemStatus = (index: number, newStatus: "good" | "attention" | "urgent") => {
     setItems((prev) =>

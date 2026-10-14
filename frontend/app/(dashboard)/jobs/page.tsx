@@ -94,7 +94,8 @@ export default function JobsPage() {
 
   useEffect(() => {
     loadJobs();
-  }, [loadJobs]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filter]);
 
   const filteredJobs = jobs.filter((job) => {
     const matchesFilter = filter === "all" || job.status === filter;

@@ -1,12 +1,29 @@
 function getBaseUrl(): string {
-  let url = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000").trim();
-  if (!url.startsWith("http://") && !url.startsWith("https://")) {
-    url = `https://${url}`;
+  // If explicitly configured with a remote URL, prioritize it
+  const envUrl = process.env.NEXT_PUBLIC_API_URL?.trim();
+  if (envUrl && envUrl.length > 0 && !envUrl.includes("localhost") && !envUrl.includes("127.0.0.1")) {
+    let url = envUrl;
+    if (!url.startsWith("http://") && !url.startsWith("https://")) {
+      url = `https://${url}`;
+    }
+    return url.replace(/\/+$/, "");
   }
-  return url.replace(/\/+$/, "");
-}
 
-const API_BASE_URL = getBaseUrl();
+  // If in browser on any remote preview or production deployment (*.vercel.app)
+  if (
+    typeof window !== "undefined" &&
+    window.location.hostname !== "localhost" &&
+    window.location.hostname !== "127.0.0.1"
+  ) {
+    return "https://fastapibackend-production-b599.up.railway.app";
+  }
+
+  if (process.env.NODE_ENV === "production") {
+    return "https://fastapibackend-production-b599.up.railway.app";
+  }
+
+  return (envUrl || "http://localhost:8000").replace(/\/+$/, "");
+}
 
 export class ApiError extends Error {
   constructor(public status: number, message: string, public data?: any) {
@@ -31,7 +48,8 @@ export async function apiClient<T>(endpoint: string, options: RequestOptions = {
     headers["Authorization"] = `Bearer ${token.trim()}`;
   }
 
-  const url = `${API_BASE_URL}${endpoint.startsWith("/") ? endpoint : `/${endpoint}`}`;
+  const baseUrl = getBaseUrl();
+  const url = `${baseUrl}${endpoint.startsWith("/") ? endpoint : `/${endpoint}`}`;
 
   const response = await fetch(url, {
     headers,

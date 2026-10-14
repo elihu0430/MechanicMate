@@ -66,7 +66,8 @@ export default function PaymentsPage() {
     return () => {
       isMounted = false;
     };
-  }, [api]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const totalCollected = payments.reduce((sum, p) => sum + p.amount, 0);
 

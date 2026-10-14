@@ -38,8 +38,8 @@ export default function VehiclesPage() {
         custMap[c.id] = c;
       });
       setCustomers(custMap);
-      if (custList.length > 0 && !newCustomerId) {
-        setNewCustomerId(custList[0].id);
+      if (custList.length > 0) {
+        setNewCustomerId((prev) => prev || custList[0].id);
       }
     } catch (err: any) {
       console.error("Failed to load vehicles:", err);
@@ -47,11 +47,12 @@ export default function VehiclesPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [api, newCustomerId]);
+  }, [api]);
 
   useEffect(() => {
     loadData();
-  }, [loadData]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleAddVehicle = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -131,11 +131,11 @@ export function Dashboard() {
       setCustomers(custList);
       setVehicles(vehList);
 
-      if (custList.length > 0 && !newJobForm.customerId) {
+      if (custList.length > 0) {
         setNewJobForm((prev) => ({
           ...prev,
-          customerId: custList[0].id,
-          vehicleId: vehList.length > 0 ? vehList[0].id : "",
+          customerId: prev.customerId || custList[0].id,
+          vehicleId: prev.vehicleId || (vehList.length > 0 ? vehList[0].id : ""),
         }));
       }
     } catch (err: any) {
@@ -144,7 +144,7 @@ export function Dashboard() {
     } finally {
       setIsLoading(false);
     }
-  }, [newJobForm.customerId]);
+  }, []);
 
   useEffect(() => {
     loadDashboardData();

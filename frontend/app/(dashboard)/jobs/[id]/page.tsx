@@ -53,7 +53,8 @@ export default function JobDetailPage() {
 
   useEffect(() => {
     loadJob();
-  }, [loadJob]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
 
   const handleUpdateStatus = async (newStatus: string) => {
     if (!job) return;

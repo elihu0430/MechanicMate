@@ -74,7 +74,8 @@ export default function VehicleDetailPage() {
 
   useEffect(() => {
     loadVehicleDetails();
-  }, [loadVehicleDetails]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
 
   // New Swap Form State
   const [swapType, setSwapType] = useState<"engine" | "chassis">("engine");

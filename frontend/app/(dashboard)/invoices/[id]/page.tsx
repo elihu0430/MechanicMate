@@ -84,7 +84,8 @@ export default function InvoiceDetailPage() {
         console.error("Failed to load invoice:", err);
       })
       .finally(() => setLoading(false));
-  }, [id, api]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
 
   const handleMarkAsPaid = async () => {
     if (!invoice) return;
