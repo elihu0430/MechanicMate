@@ -1,4 +1,5 @@
 import { apiClient } from "./client";
+import type { ApiRepairOrderItem } from "./jobs";
 
 export interface ApiPayment {
   id: string;
@@ -24,6 +25,20 @@ export interface ApiInvoice {
   paid_amount: number;
   created_at: string;
   payments: ApiPayment[];
+
+  // Enriched fields from associated Repair Order / Customer / Vehicle
+  ro_number?: string | null;
+  public_token?: string | null;
+  customer_name?: string | null;
+  customer_phone?: string | null;
+  customer_email?: string | null;
+  vehicle_name?: string | null;
+  license_plate?: string | null;
+  vehicle_vin?: string | null;
+  vehicle_mileage_km?: number | null;
+  customer_concern?: string | null;
+  recommended_work?: string | null;
+  items?: ApiRepairOrderItem[];
 }
 
 export type InvoiceRead = ApiInvoice;
@@ -54,9 +69,10 @@ export async function fetchInvoice(invoiceId: string, token?: string): Promise<A
 }
 
 export async function createInvoice(data: CreateInvoiceInput, token?: string): Promise<ApiInvoice> {
+  const defaultDueDate = new Date(Date.now() + 14 * 86400000).toISOString().split("T")[0];
   const payload = {
     ...data,
-    due_date: data.due_date || new Date(Date.now() + 14 * 86400000).toISOString(),
+    due_date: data.due_date ? data.due_date.split("T")[0] : defaultDueDate,
   };
   return apiClient<ApiInvoice>(`/api/v1/invoices`, {
     method: "POST",
@@ -77,9 +93,18 @@ export async function recordPayment(
   });
 }
 
+export async function recordPortalPayment(
+  portalToken: string,
+  data: RecordPaymentInput
+): Promise<ApiPayment> {
+  return apiClient<ApiPayment>(`/api/v1/invoices/portal/${portalToken}/pay`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
 export async function fetchPortalInvoice(token: string): Promise<ApiInvoice> {
   return apiClient<ApiInvoice>(`/api/v1/invoices/portal/${token}`, {
     method: "GET",
   });
 }
-

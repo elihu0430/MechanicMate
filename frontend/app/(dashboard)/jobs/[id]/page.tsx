@@ -2,9 +2,10 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { AppShell } from "@/components/layout/AppShell";
 import { useApi, ApiRepairOrder } from "@/lib/api";
+import type { SendJobQuoteResponse } from "@/lib/api/jobs";
 import { formatCurrency } from "@/lib/format";
 
 const STATUS_STEPS = [
@@ -26,6 +27,7 @@ const STATUS_LABELS: Record<string, string> = {
 
 export default function JobDetailPage() {
   const params = useParams();
+  const router = useRouter();
   const id = params?.id as string;
   const api = useApi();
 
@@ -34,7 +36,9 @@ export default function JobDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
   const [quoteSending, setQuoteSending] = useState(false);
-  const [quoteSuccess, setQuoteSuccess] = useState<string | null>(null);
+  const [quoteResult, setQuoteResult] = useState<SendJobQuoteResponse | null>(null);
+  const [copiedEstimateLink, setCopiedEstimateLink] = useState(false);
+  const [generatingInvoice, setGeneratingInvoice] = useState(false);
 
   const loadJob = useCallback(async () => {
     if (!id) return;
@@ -92,15 +96,35 @@ export default function JobDetailPage() {
     if (!job) return;
     try {
       setQuoteSending(true);
-      setQuoteSuccess(null);
+      setQuoteResult(null);
       const res = await api.jobs.sendQuote(job.id);
-      setQuoteSuccess(`WhatsApp quote dispatched to ${res.recipient}!`);
-      setTimeout(() => setQuoteSuccess(null), 5000);
+      setQuoteResult(res);
     } catch (err: any) {
       alert(err?.message || "Failed to dispatch quote");
     } finally {
       setQuoteSending(false);
     }
+  };
+
+  const handleOpenTaxInvoice = async () => {
+    if (!job) return;
+    try {
+      setGeneratingInvoice(true);
+      const inv = await api.invoices.create({ repair_order_id: job.id });
+      router.push(`/invoices/${inv.id}`);
+    } catch {
+      router.push(`/invoices/${job.id}`);
+    } finally {
+      setGeneratingInvoice(false);
+    }
+  };
+
+  const handleCopyEstimateLink = (estimatePath: string) => {
+    if (typeof window === "undefined") return;
+    const fullUrl = `${window.location.origin}${estimatePath}`;
+    navigator.clipboard.writeText(fullUrl);
+    setCopiedEstimateLink(true);
+    setTimeout(() => setCopiedEstimateLink(false), 2500);
   };
 
   if (isLoading) {
@@ -139,6 +163,18 @@ export default function JobDetailPage() {
     ? `${job.vehicle.year} ${job.vehicle.make} ${job.vehicle.model}`
     : "Vehicle";
 
+  const estimatePath = quoteResult?.estimate_url || `/estimate/${job.public_token || job.id}`;
+  const cleanPhone = customerPhone.replace(/\D/g, "").replace(/^0/, "27");
+  const fallbackWaUrl =
+    quoteResult?.whatsapp_url ||
+    `https://wa.me/${cleanPhone}?text=${encodeURIComponent(
+      `Hi ${customerName}, MechanicMate Workshop has prepared repair estimate ${job.ro_number} for ${vehicleName} (${plate}). Total: ${formatCurrency(
+        job.total_amount
+      )}. Approve online: ${
+        typeof window !== "undefined" ? window.location.origin : "https://mechanicmate.vercel.app"
+      }${estimatePath}`
+    )}`;
+
   return (
     <AppShell activeItem="jobs">
       <div className="mx-auto max-w-4xl px-4 py-6 space-y-6">
@@ -161,30 +197,86 @@ export default function JobDetailPage() {
             </div>
           </div>
 
-          {/* Top Actions: Quote, Inspection & Print */}
+          {/* Top Actions: Send Quote, Preview Estimate & Tax Invoice */}
           <div className="flex items-center gap-2.5 flex-wrap">
             <button
               onClick={handleSendQuote}
               disabled={quoteSending}
-              className="min-h-[42px] inline-flex items-center gap-2 rounded-xl bg-[#0f2416] border border-[#1d472c] px-3.5 py-2 text-xs font-bold text-[#22c55e] hover:bg-[#163620] transition-all select-none disabled:opacity-50"
+              className="min-h-[42px] inline-flex items-center gap-2 rounded-xl bg-[#0f2416] border border-[#1d472c] px-3.5 py-2 text-xs font-bold text-[#22c55e] hover:bg-[#163620] transition-all select-none disabled:opacity-50 cursor-pointer"
             >
-              <span>💬 {quoteSending ? "Dispatching..." : "Send WhatsApp Quote"}</span>
+              <span>💬 {quoteSending ? "Dispatching Quote..." : "Send WhatsApp Quote"}</span>
             </button>
-            <button
-              onClick={() => window.print()}
-              className="min-h-[42px] inline-flex items-center gap-2 rounded-xl bg-[#22c55e] px-4 py-2 text-xs font-bold text-black hover:bg-[#16a34a] shadow-md transition-all select-none"
+
+            <Link
+              href={estimatePath}
+              target="_blank"
+              className="min-h-[42px] inline-flex items-center gap-2 rounded-xl bg-[#181818] border border-[#2c2c2c] px-3.5 py-2 text-xs font-bold text-neutral-200 hover:bg-[#222222] hover:border-[#3a3a3a] transition-all select-none"
             >
-              <span>🖨️ Print Invoice (A4)</span>
+              <span>🔗 Customer Quote Portal</span>
+            </Link>
+
+            <button
+              onClick={handleOpenTaxInvoice}
+              disabled={generatingInvoice}
+              className="min-h-[42px] inline-flex items-center gap-2 rounded-xl bg-[#22c55e] px-4 py-2 text-xs font-bold text-black hover:bg-[#16a34a] shadow-md transition-all select-none disabled:opacity-50 cursor-pointer"
+            >
+              <span>🧾 {generatingInvoice ? "Opening Invoice..." : "Tax Invoice & Print"}</span>
             </button>
           </div>
         </div>
 
-        {quoteSuccess && (
-          <div className="p-3 rounded-xl bg-[#22c55e]/10 border border-[#22c55e]/30 text-xs font-bold text-[#22c55e] flex items-center justify-between animate-in fade-in">
-            <span>✓ {quoteSuccess}</span>
-            <button onClick={() => setQuoteSuccess(null)} className="text-white hover:underline">
-              Dismiss
-            </button>
+        {/* Rich Quote Dispatch Confirmation Card */}
+        {quoteResult && (
+          <div className="rounded-2xl bg-[#0d1f14] border border-[#22c55e]/40 p-4 sm:p-5 space-y-3 animate-in fade-in">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="flex items-center gap-2.5">
+                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#22c55e] text-black text-xs font-black">
+                  ✓
+                </span>
+                <div>
+                  <p className="text-xs sm:text-sm font-bold text-white">
+                    Quote Prepared & Queued for {quoteResult.customer_name || customerName} ({quoteResult.recipient})
+                  </p>
+                  <p className="text-[11px] text-[#86efac]">
+                    {quoteResult.run?.status === "skipped" || quoteResult.run?.status === "fallback"
+                      ? "Direct WhatsApp link & interactive customer approval portal ready below."
+                      : `Trigger.dev Run ID: ${quoteResult.run?.id || "dispatched"} • Customer approval link active.`}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setQuoteResult(null)}
+                className="text-xs font-semibold text-neutral-400 hover:text-white self-end sm:self-auto"
+              >
+                Dismiss
+              </button>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2.5 pt-1">
+              <a
+                href={fallbackWaUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 rounded-xl bg-[#22c55e] px-3.5 py-2 text-xs font-black text-black hover:bg-[#16a34a] transition-all"
+              >
+                <span>📲 Send Directly in WhatsApp</span>
+              </a>
+
+              <button
+                onClick={() => handleCopyEstimateLink(estimatePath)}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-[#14291b] border border-[#234730] px-3.5 py-2 text-xs font-bold text-[#86efac] hover:bg-[#1b3724] transition-all cursor-pointer"
+              >
+                <span>{copiedEstimateLink ? "✓ Copied Portal Link!" : "📋 Copy Estimate Link"}</span>
+              </button>
+
+              <Link
+                href={estimatePath}
+                target="_blank"
+                className="inline-flex items-center gap-1.5 rounded-xl bg-[#14291b] border border-[#234730] px-3.5 py-2 text-xs font-bold text-white hover:bg-[#1b3724] transition-all"
+              >
+                <span>↗ Open Estimate Portal</span>
+              </Link>
+            </div>
           </div>
         )}
 
@@ -242,12 +334,12 @@ export default function JobDetailPage() {
                 <span>📞 Call</span>
               </a>
               <a
-                href={`https://wa.me/${customerPhone.replace(/\D/g, "")}`}
+                href={fallbackWaUrl}
                 target="_blank"
                 rel="noreferrer"
                 className="inline-flex items-center gap-1.5 rounded-lg bg-[#0f2416] border border-[#1d472c] px-3 py-1.5 text-xs font-semibold text-[#22c55e] hover:bg-[#163620]"
               >
-                <span>💬 WhatsApp</span>
+                <span>💬 WhatsApp Quote</span>
               </a>
             </div>
           </div>

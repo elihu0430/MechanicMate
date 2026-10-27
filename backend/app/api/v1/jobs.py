@@ -5,6 +5,8 @@ from sqlalchemy.orm import selectinload
 from typing import List, Optional
 import uuid
 import secrets
+import re
+from urllib.parse import quote
 from decimal import Decimal
 
 from app.dependencies import DatabaseDep, CurrentUserDep
@@ -26,11 +28,13 @@ from app.services.trigger import trigger_service
 
 router = APIRouter(prefix="/jobs", tags=["Jobs & Repair Orders"])
 
+
 def compute_completion(items: List[RepairOrderItem]) -> float:
     if not items:
         return 0.0
     completed = sum(1 for item in items if item.is_completed)
     return round((completed / len(items)) * 100.0, 1)
+
 
 @router.get("", response_model=List[RepairOrderRead])
 async def list_jobs(
@@ -61,6 +65,7 @@ async def list_jobs(
         read_obj.completion_percentage = compute_completion(j.items)
         output.append(read_obj)
     return output
+
 
 @router.post("", response_model=RepairOrderRead, status_code=status.HTTP_201_CREATED)
 async def create_job(
@@ -152,7 +157,7 @@ async def create_job(
     )
     db.add(new_ro)
     await db.flush()
-    
+
     # Reload with eager relationships to avoid MissingGreenlet
     res = await db.execute(
         select(RepairOrder)
@@ -174,6 +179,7 @@ async def create_job(
     read_obj = RepairOrderRead.model_validate(loaded_ro)
     read_obj.completion_percentage = compute_completion(loaded_ro.items)
     return read_obj
+
 
 @router.get("/portal/{token}", response_model=RepairOrderRead)
 async def get_portal_job(
@@ -206,6 +212,7 @@ async def get_portal_job(
     read_obj = RepairOrderRead.model_validate(ro)
     read_obj.completion_percentage = compute_completion(ro.items)
     return read_obj
+
 
 @router.get("/{job_id}", response_model=RepairOrderRead)
 async def get_job(
@@ -245,6 +252,7 @@ async def get_job(
     read_obj = RepairOrderRead.model_validate(ro)
     read_obj.completion_percentage = compute_completion(ro.items)
     return read_obj
+
 
 @router.patch("/{job_id}/status", response_model=RepairOrderRead)
 async def update_job_status(
@@ -293,6 +301,7 @@ async def update_job_status(
     read_obj = RepairOrderRead.model_validate(ro)
     read_obj.completion_percentage = compute_completion(ro.items)
     return read_obj
+
 
 @router.patch("/{job_id}/items/{item_id}/toggle")
 async def toggle_item_completion(
@@ -347,12 +356,16 @@ async def send_job_quote(
     current_user: AuthenticatedUser = CurrentUserDep,
 ):
     """
-    Dispatches a quote estimate notification to the customer via Trigger.dev WhatsApp task.
+    Dispatches a quote estimate notification to the customer via Trigger.dev WhatsApp task,
+    and returns a direct WhatsApp deep-link + public estimate URL for immediate workshop use.
     """
     workshop_uuid = uuid.UUID(current_user.workshop_id)
     query = (
         select(RepairOrder)
-        .options(selectinload(RepairOrder.items))
+        .options(
+            selectinload(RepairOrder.items),
+            selectinload(RepairOrder.vehicle),
+        )
         .where(
             and_(
                 RepairOrder.id == job_id,
@@ -373,20 +386,58 @@ async def send_job_quote(
             detail="Customer phone number is required for WhatsApp quote dispatch"
         )
 
-    run_meta = await trigger_service.dispatch_whatsapp(
-        to=customer.phone,
-        template_name="mechanicmate_quote_approval",
-        variables={
-            "customer_name": f"{customer.first_name} {customer.last_name}",
-            "ro_number": ro.ro_number,
-            "total_amount": f"R{ro.total_amount:.2f}",
-            "portal_url": f"/portal/{ro.public_token}",
-        }
+    if not ro.public_token:
+        ro.public_token = f"ro_{secrets.token_hex(16)}"
+        await db.flush()
+
+    customer_name = f"{customer.first_name} {customer.last_name}".strip()
+    vehicle_label = (
+        f"{ro.vehicle.year} {ro.vehicle.make} {ro.vehicle.model} ({ro.vehicle.license_plate})"
+        if ro.vehicle
+        else "your vehicle"
     )
+    estimate_path = f"/estimate/{ro.public_token}"
+    total_formatted = f"R{float(ro.total_amount or 0):,.2f}"
+
+    try:
+        run_meta = await trigger_service.dispatch_whatsapp(
+            to=customer.phone,
+            template_name="mechanicmate_quote_approval",
+            variables={
+                "customer_name": customer_name,
+                "ro_number": ro.ro_number,
+                "vehicle": vehicle_label,
+                "total_amount": total_formatted,
+                "portal_url": estimate_path,
+            }
+        )
+    except Exception as exc:
+        run_meta = {
+            "id": "fallback_direct_wa",
+            "status": "fallback",
+            "reason": str(exc),
+        }
+
+    clean_phone = re.sub(r"\D", "", customer.phone)
+    if clean_phone.startswith("0") and len(clean_phone) == 10:
+        clean_phone = "27" + clean_phone[1:]
+
+    wa_text = (
+        f"Hi {customer_name}, MechanicMate Workshop has prepared repair estimate "
+        f"{ro.ro_number} for {vehicle_label}.\n\n"
+        f"Estimated Total (Incl. 15% VAT): {total_formatted}\n"
+        f"Review & Approve Online: https://mechanicmate.vercel.app{estimate_path}"
+    )
+    whatsapp_url = f"https://wa.me/{clean_phone}?text={quote(wa_text)}"
 
     return {
         "success": True,
         "job_id": str(job_id),
+        "ro_number": ro.ro_number,
         "recipient": customer.phone,
+        "customer_name": customer_name,
+        "total_amount": float(ro.total_amount or 0),
+        "estimate_url": estimate_path,
+        "whatsapp_url": whatsapp_url,
         "run": run_meta,
     }

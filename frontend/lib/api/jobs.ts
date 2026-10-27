@@ -75,6 +75,22 @@ export interface CreateJobInput {
   }>;
 }
 
+export interface SendJobQuoteResponse {
+  success: boolean;
+  job_id: string;
+  ro_number?: string;
+  recipient: string;
+  customer_name?: string;
+  total_amount?: number;
+  estimate_url?: string;
+  whatsapp_url?: string;
+  run?: {
+    id?: string;
+    status?: string;
+    reason?: string;
+  };
+}
+
 export async function fetchJobs(status?: string, token?: string): Promise<ApiRepairOrder[]> {
   const query = status ? `?status=${encodeURIComponent(status)}` : "";
   return apiClient<ApiRepairOrder[]>(`/api/v1/jobs${query}`, {
@@ -106,15 +122,19 @@ export async function updateJobStatus(jobId: string, status: string, token?: str
   });
 }
 
-export async function toggleJobItem(jobId: string, itemId: string, token?: string): Promise<{ success: boolean; item_id: string; is_completed: boolean; completion_percentage: number }> {
+export async function toggleJobItem(
+  jobId: string,
+  itemId: string,
+  token?: string
+): Promise<{ success: boolean; item_id: string; is_completed: boolean; completion_percentage: number }> {
   return apiClient(`/api/v1/jobs/${jobId}/items/${itemId}/toggle`, {
     method: "PATCH",
     token,
   });
 }
 
-export async function sendJobQuote(jobId: string, token?: string): Promise<{ success: boolean; recipient: string; job_id: string }> {
-  return apiClient(`/api/v1/jobs/${jobId}/send-quote`, {
+export async function sendJobQuote(jobId: string, token?: string): Promise<SendJobQuoteResponse> {
+  return apiClient<SendJobQuoteResponse>(`/api/v1/jobs/${jobId}/send-quote`, {
     method: "POST",
     token,
   });
@@ -125,4 +145,3 @@ export async function fetchPortalJob(portalToken: string): Promise<ApiRepairOrde
     method: "GET",
   });
 }
-
